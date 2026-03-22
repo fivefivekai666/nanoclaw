@@ -1,0 +1,63 @@
+# pyproject.toml 是现代 Python 项目的核心配置文件。
+# 你可以把它理解成：
+# 1. 项目的身份证
+# 2. 依赖清单
+# 3. 构建方式说明
+# 4. 命令行入口定义
+#
+# 以后你执行：
+#   pip install -e .
+# 的时候，Python 就会读取这个文件来安装项目。
+
+[project]
+# 项目名称。
+# 这个名字会出现在安装信息里，也会影响一些构建元数据。
+name = "myagent"
+
+# 当前项目版本。
+# 先随便从 0.1.0 开始，后面功能变多再升级。
+version = "0.1.0"
+
+# 项目简介。
+description = "A lightweight agent runtime inspired by nanobot and DeerFlow"
+
+# 要求的 Python 版本。
+# 这里我建议直接用 3.11 及以上，因为：
+# - asyncio 更成熟
+# - 类型系统更好
+# - 以后写 agent runtime 会舒服很多
+requires-python = ">=3.11"
+
+# 运行依赖。
+# 现在只放两个最基础的：
+# - typer：后面做 CLI 很方便
+# - pydantic：后面做 Config / 数据模型 很方便
+#
+# 虽然第 1 步还没真正用到它们，
+# 但这是后续马上就要用的核心库，先装上没问题。
+dependencies = [
+  "typer>=0.12.0",
+  "pydantic>=2.7.0",
+]
+
+[project.scripts]
+# 这里定义命令行入口。
+#
+# 左边：
+#   myagent
+# 表示安装完成后，你可以在终端直接敲：
+#   myagent
+#
+# 右边：
+#   app.main:main
+# 表示这个命令最终会调用：
+#   app/main.py 文件里的 main() 函数
+myagent = "app.main:main"
+
+[build-system]
+# 构建项目所需的基础工具。
+# setuptools 是最常见的 Python 构建工具之一。
+requires = ["setuptools>=68", "wheel"]
+
+# 指定使用 setuptools 来构建这个项目。
+build-backend = "setuptools.build_meta"
