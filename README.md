@@ -1,24 +1,24 @@
-# myagent · Step 3
+# myagent · Step 4
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 3 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 4 步。
 
 ## 这一步在做什么
 
-第 2 步解决的是：
+第 4 步开始给项目加入一个新的关键层：
 
-- 配置“长什么样”
+- `provider`
 
-第 3 步解决的是：
+Provider 的职责是：
 
-- 配置“从哪里来”
+- 让上层 runtime 用统一方式调用模型
+- 把具体模型厂商差异隔离在底层
 
-所以这一步新增了一个最小配置加载器：
+为了先学清楚结构，这一步我们不接真实 API，
+而是先实现：
 
-- `config/loader.py`
-
-并增加了一个最小 JSON 配置文件：
-
-- `config/default.json`
+- `BaseProvider`：统一接口
+- `MockProvider`：假的 provider 实现
+- `make_provider(config)`：根据配置选择 provider
 
 ## 当前启动流程
 
@@ -27,21 +27,23 @@ main.py
   ↓
 load_config()
   ↓
-config/default.json
-  ↓
 Config
+  ↓
+make_provider(config)
+  ↓
+MockProvider
+  ↓
+provider.chat("hello from step4")
 ```
 
 ## 你会学到什么
 
-1. schema 和 loader 的职责区别
-2. 为什么真实程序需要从文件读取配置
-3. 如何把 JSON 配置加载成 Pydantic 对象
-4. 为什么“加载配置”是 runtime 启动链路的一部分
+1. 为什么 agent runtime 需要 provider 抽象层
+2. BaseProvider 和具体 provider 的分工
+3. 为什么先用 MockProvider 跑通链路
+4. 如何根据配置初始化 provider
 
 ## 运行方式
-
-推荐使用虚拟环境：
 
 ```bash
 cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
@@ -58,6 +60,8 @@ myagent booted
 loaded config from = config/default.json
 agent.name = myagent
 agent.workspace = ./workspace
-provider.name = openai
-provider.model = gpt-4.1-mini
+provider.name = mock
+provider.model = mock-echo-v1
+test_prompt = hello from step4
+provider.response = [mock-provider:mock-echo-v1] you said: hello from step4
 ```
