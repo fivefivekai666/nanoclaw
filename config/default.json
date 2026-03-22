@@ -1,0 +1,11 @@
+{
+  "agent": {
+    "name": "myagent",
+    "workspace": "./workspace",
+    "system_prompt": "You are a helpful assistant."
+  },
+  "provider": {
+    "name": "openai",
+    "model": "gpt-4.1-mini"
+  }
+}

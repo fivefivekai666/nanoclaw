@@ -61,3 +61,11 @@ requires = ["setuptools>=68", "wheel"]
 
 # 指定使用 setuptools 来构建这个项目。
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# 这里显式告诉 setuptools：
+# “这个项目确实有多个顶层包，而且它们都应该被打包进去。”
+#
+# 如果不写这段，setuptools 在 flat layout 下会因为发现多个顶层目录而拒绝继续，
+# 这就是刚才 editable install 失败的根本原因。
+packages = ["app", "config", "runtime", "providers"]

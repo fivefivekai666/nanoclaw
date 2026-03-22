@@ -1,38 +1,52 @@
-# myagent · Step 2
+# myagent · Step 3
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 2 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 3 步。
 
-## 这一小步的目标
+## 这一步在做什么
 
-这一步只做两件事：
+第 2 步解决的是：
 
-- 把 `Config` 正式写出来
-- 让 `main.py` 真的开始读取默认配置
+- 配置“长什么样”
+
+第 3 步解决的是：
+
+- 配置“从哪里来”
+
+所以这一步新增了一个最小配置加载器：
+
+- `config/loader.py`
+
+并增加了一个最小 JSON 配置文件：
+
+- `config/default.json`
+
+## 当前启动流程
+
+```text
+main.py
+  ↓
+load_config()
+  ↓
+config/default.json
+  ↓
+Config
+```
 
 ## 你会学到什么
 
-1. 为什么 agent 项目要先有配置对象
-2. 如何用 Pydantic 定义最小配置结构
-3. 为什么配置要分层，而不是全塞在一个类里
-4. `main.py` 如何围绕配置对象开始运行
-
-## 当前配置结构
-
-```text
-Config
-├─ agent
-│  ├─ name
-│  ├─ workspace
-│  └─ system_prompt
-└─ provider
-   ├─ name
-   └─ model
-```
+1. schema 和 loader 的职责区别
+2. 为什么真实程序需要从文件读取配置
+3. 如何把 JSON 配置加载成 Pydantic 对象
+4. 为什么“加载配置”是 runtime 启动链路的一部分
 
 ## 运行方式
 
+推荐使用虚拟环境：
+
 ```bash
 cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 myagent
 ```
@@ -41,6 +55,7 @@ myagent
 
 ```text
 myagent booted
+loaded config from = config/default.json
 agent.name = myagent
 agent.workspace = ./workspace
 provider.name = openai

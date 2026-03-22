@@ -3,50 +3,39 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-在第 1 步里，我们只做了一件事：
-    打印 "myagent booted"
+到了第 3 步，我们不再直接依赖代码里写死的 DEFAULT_CONFIG，
+而是正式引入“配置加载”这件事。
 
-到了第 2 步，我们开始让 main.py 真的“接触配置对象”。
+也就是说，程序启动时会这样工作：
 
-注意：
-这一步仍然是非常小的一步。
-我们还不会：
-- 调模型
-- 跑 agent loop
-- 读配置文件
-- 启动 channels
+1. main.py 调用 load_config()
+2. load_config() 去读取 config/default.json
+3. loader.py 把 JSON 数据变成 Config 对象
+4. main.py 再使用这个 Config
 
-我们现在只做：
-1. 导入默认配置
-2. 打印几项配置内容
-3. 让你看到“程序已经开始围绕 Config 运转”
+这意味着项目从这一刻开始，已经不只是“有一个配置类”，
+而是拥有了“启动时读取配置”的能力。
 
-这是从“一个会启动的包”过渡到“一个有 runtime 配置概念的程序”的关键一步。
+这虽然还是很小的一步，但已经非常接近真实软件的启动流程了。
 """
 
-from config.schema import DEFAULT_CONFIG
+from config.loader import DEFAULT_CONFIG_PATH, load_config
 
 
 def main() -> None:
     """
     项目的命令行入口函数。
 
-    现在它做的事情比第 1 步多一点点：
-    - 先拿到默认配置
-    - 再把里面几个关键字段打印出来
+    这一步的重点不在“打印内容本身”，而在于：
+    我们现在已经不是直接使用写死在 Python 代码里的默认对象了，
+    而是先从配置文件加载，再继续运行。
 
-    这样你运行 `myagent` 时，看到的就不再只是“程序活了”，
-    而是能进一步确认：
-
-    1. Config 类已经定义好了
-    2. DEFAULT_CONFIG 已经能正常创建
-    3. main.py 已经能读取配置对象
-
-    这是非常关键的一小步。
+    这正是很多 runtime / server / agent 程序的典型启动方式。
     """
-    config = DEFAULT_CONFIG
+    config = load_config(DEFAULT_CONFIG_PATH)
 
     print("myagent booted")
+    print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
     print(f"agent.name = {config.agent.name}")
     print(f"agent.workspace = {config.agent.workspace}")
     print(f"provider.name = {config.provider.name}")
