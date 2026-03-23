@@ -1,52 +1,66 @@
-# myagent · Step 27
+# myagent · Step 28
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 27 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 28 步。
 
 ## 这一步在做什么
 
-第 27 步的目标是：
+第 28 步的目标是：
 
-- 给 `LoopResult` 增加最小 `status / stop_reason`
-- 让 loop 不只是表示“产出了什么”
-- 还开始表示“这一轮为什么结束”
+- 给 `LoopResult` 增加最小 `error / failure path` 边界
+- 让 loop 不只会表达“正常结束”
+- 也开始能表达“异常结束”
 
 ## 为什么这样做
 
-第 26 步已经让 loop 从：
+第 27 步已经让 loop 能表达：
 
-```text
-run_once(session) -> Message
-```
+- `status`
+- `stop_reason`
 
-升级成：
+但当时只覆盖了 happy-path：
 
-```text
-run_once(session) -> LoopResult
-```
+- `completed`
+- `assistant_response`
 
-但当时的 `LoopResult` 还只是“结果内容容器”，
-还不能表达这轮运行的结束语义。
-
-而后面如果你要扩展：
+如果后面要扩展：
 - tool calling
-- error path
-- guardrail block
-- max step stop
-- retry / fallback
+- provider error
+- retry
+- guardrail
+- multi-step orchestration
 
-都需要先有统一的 status / stop_reason 位置。
+那么 loop 一定要先具备最小失败边界。
 
-所以第 27 步先做最小 happy-path 语义：
+所以第 28 步先补最小 failure path：
 
-- `status = completed`
-- `stop_reason = assistant_response`
+- `status = failed`
+- `stop_reason = provider_error`
+- `error = LoopError(...)`
 
 ## 当前新增结构
 
 - `LoopStatus`
   - `COMPLETED`
+  - `FAILED`
 - `LoopStopReason`
   - `ASSISTANT_RESPONSE`
+  - `PROVIDER_ERROR`
+- `LoopError`
+  - `kind`
+  - `message`
+
+## 行为约束
+
+### 成功路径
+- `assistant_message` 不为空
+- `error = None`
+- assistant reply 会写回 session
+
+### 失败路径
+- `assistant_message = None`
+- `error` 包含最小错误摘要
+- 不伪造 assistant message
+- 不把失败当成 assistant reply 写回 session
 
 ## 修改模块
 
@@ -63,17 +77,24 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 source .venv/bin/activate
 pip install -e .
 
-myagent chat "hello from step27" --session-id step27
+# 成功路径
+myagent chat "hello from step28-success" --session-id step28-success
+
+# 失败路径（仅用于验证）
+myagent chat "hello from step28-failure" --session-id step28-failure --simulate-provider-error
 ```
 
 ## 预期现象
 
-输出里会显示：
-
+成功路径会显示：
 - `loop.result.status = completed`
 - `loop.result.stop_reason = assistant_response`
-- `loop.result.status_type = LoopStatus`
-- `loop.result.stop_reason_type = LoopStopReason`
+- `loop.result.error.kind = None`
 
-这表示 loop 已开始表达“这轮为什么结束”，
-而不只是“这轮产生了什么回复”。
+失败路径会显示：
+- `loop.result.status = failed`
+- `loop.result.stop_reason = provider_error`
+- `loop.result.error.kind = RuntimeError`
+- `assistant.message.role = None`
+
+这表示 loop 已开始具备最小 success / failure 两条语义边界。

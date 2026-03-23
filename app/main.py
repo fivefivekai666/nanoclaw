@@ -3,9 +3,9 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 27 步，我们继续沿着 runtime 主线推进：
-给 LoopResult 加上最小 status / stop_reason，
-让 loop 不只是“有结果”，还开始“表达为什么结束”。
+到了第 28 步，我们继续沿着 runtime 主线推进：
+给 LoopResult 加上最小 error / failure path 边界，
+让 loop 不只会表达“正常结束”，也开始能表达“异常结束”。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
@@ -14,6 +14,7 @@ app/main.py
 - context builder：稳定的 section-based prompt 装配边界
 - loop result：一次运行的结构化结果边界
 - loop status / stop reason：一次运行的最小结束语义
+- loop error：一次运行的最小失败信息边界
 """
 
 from __future__ import annotations
@@ -25,9 +26,11 @@ import typer
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from memory import FileMemoryProvider
 from providers import make_provider
+from providers.base import BaseProvider
 from runtime import (
     AgentLoop,
     ContextBuilder,
+    LoopError,
     LoopResult,
     LoopStatus,
     LoopStopReason,
@@ -40,6 +43,17 @@ from runtime import (
     load_workspace_context,
     save_session,
 )
+
+
+class FailingProvider(BaseProvider):
+    """仅用于第 28 步本地验证 failure path 的最小 provider。"""
+
+    def __init__(self, error_message: str = "simulated provider failure") -> None:
+        self.error_message = error_message
+
+    def chat(self, prompt: str) -> str:
+        raise RuntimeError(self.error_message)
+
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
 sessions_app = typer.Typer(help="Manage saved sessions.")
@@ -63,12 +77,18 @@ def chat(
         default=None,
         help="临时覆盖 response policy 风格；支持 normal / concise。未知值会 fallback 到 normal。",
     ),
+    simulate_provider_error: bool = typer.Option(
+        default=False,
+        help="仅用于验证第 28 步 failure path：模拟 provider 调用失败。",
+    ),
 ) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
+    if simulate_provider_error:
+        provider = FailingProvider()
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
     requested_response_style = response_style or config.agent.response_style
@@ -126,6 +146,7 @@ def chat(
     print(f"agent.response_style.effective = {response_policy.style.value}")
     print(f"agent.response_style.type = {ResponseStyle.__name__}")
     print(f"agent.response_style.fallback_used = {response_policy.fallback_used}")
+    print(f"provider.simulated_error = {simulate_provider_error}")
     print("prompt.mode = sectioned")
     print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
     print("response.policy = ResponsePolicy")
@@ -147,18 +168,32 @@ def chat(
     print(f"loop.result.type = {LoopResult.__name__}")
     print(f"loop.result.session_id = {loop_result.session_id}")
     print(f"loop.result.prompt_length = {len(loop_result.prompt)}")
-    print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
     print(f"loop.result.status = {loop_result.status.value}")
     print(f"loop.result.stop_reason = {loop_result.stop_reason.value}")
     print(f"loop.result.status_type = {LoopStatus.__name__}")
     print(f"loop.result.stop_reason_type = {LoopStopReason.__name__}")
+    print(f"loop.result.error_type = {LoopError.__name__}")
+    if loop_result.assistant_message is not None:
+        print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
+    else:
+        print("loop.result.assistant_role = None")
+    if loop_result.error is not None:
+        print(f"loop.result.error.kind = {loop_result.error.kind}")
+        print(f"loop.result.error.message = {loop_result.error.message}")
+    else:
+        print("loop.result.error.kind = None")
+        print("loop.result.error.message = None")
     print(f"session.id = {session.id}")
     print(f"session.loaded_from_disk = {loaded_from_disk}")
     print(f"session.previous_message_count = {previous_message_count}")
     print(f"session.message_count = {len(session.messages)}")
     print(f"session.saved_path = {saved_path}")
-    print(f"assistant.message.role = {loop_result.assistant_message.role}")
-    print(f"assistant.message.content = {loop_result.assistant_message.content}")
+    if loop_result.assistant_message is not None:
+        print(f"assistant.message.role = {loop_result.assistant_message.role}")
+        print(f"assistant.message.content = {loop_result.assistant_message.content}")
+    else:
+        print("assistant.message.role = None")
+        print("assistant.message.content = None")
     if latest_message is not None:
         print(f"session.latest.role = {latest_message.role}")
         print(f"session.latest.content = {latest_message.content}")
