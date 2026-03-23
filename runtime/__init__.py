@@ -1,11 +1,10 @@
 """
 runtime/__init__.py
 
-到了第 17 步，runtime 包除了暴露 workspace context 加载能力，
-也开始显式暴露结构化身份模型。
+到了第 18 步，runtime 包继续暴露 context / session / workspace 等能力。
 
-这意味着 workspace persona 不再只是原始文本块，
-而是开始出现可编程消费的最小字段结构。
+memory 本身已被拆分为独立模块，
+因此 runtime 这里只保留对 ContextBuilder 等运行时组件的导出。
 """
 
 from runtime.context import ContextBuilder

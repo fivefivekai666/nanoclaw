@@ -3,11 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 17 步，workspace/IDENTITY.md 不再只作为原文块注入，
-而会先尝试做最小结构化解析。
+到了第 18 步，memory placeholder 不再直接塞进 ContextBuilder，
+而是先构造成独立 memory provider，再注入 ContextBuilder。
 
-这意味着启动时我们不但知道“文件有没有加载”，
-还可以知道“有没有成功提取出结构化身份字段”。
+这样启动装配层就更接近真实系统：
+- provider 负责模型调用
+- context builder 负责上下文装配
+- memory provider 负责 memory block 生成
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from pathlib import Path
 import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
+from memory import PlaceholderMemoryProvider
 from providers import make_provider
 from runtime import (
     AgentLoop,
@@ -54,13 +57,14 @@ def chat(
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
     workspace_context = load_workspace_context(config.agent.workspace)
+    memory_provider = PlaceholderMemoryProvider()
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
         identity_role=config.agent.identity_role,
         persona_style=config.agent.persona_style,
+        memory_provider=memory_provider,
         workspace_context=workspace_context,
-        memory_placeholder="[memory placeholder: not implemented yet]",
     )
     loop = AgentLoop(provider=provider, context_builder=context_builder)
 
@@ -106,6 +110,7 @@ def chat(
     print(f"workspace.identity.vibe = {parsed_identity.vibe}")
     print(f"workspace.identity.emoji = {parsed_identity.emoji}")
     print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
+    print("memory.provider = PlaceholderMemoryProvider")
     print("memory.placeholder.enabled = True")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")

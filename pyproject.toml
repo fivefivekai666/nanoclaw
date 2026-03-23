@@ -67,5 +67,8 @@ build-backend = "setuptools.build_meta"
 # “这个项目确实有多个顶层包，而且它们都应该被打包进去。”
 #
 # 如果不写这段，setuptools 在 flat layout 下会因为发现多个顶层目录而拒绝继续，
-# 这就是刚才 editable install 失败的根本原因。
-packages = ["app", "config", "runtime", "providers"]
+# 这就是之前 editable install 失败的根本原因。
+#
+# 到了第 18 步，我们新增了独立的 memory 模块，
+# 所以也必须把 memory 包加入打包清单。
+packages = ["app", "config", "runtime", "providers", "memory"]
