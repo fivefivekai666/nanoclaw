@@ -1,53 +1,50 @@
-# myagent · Step 28
+# myagent · Step 29
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 28 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 29 步。
 
 ## 这一步在做什么
 
-第 28 步的目标是：
+第 29 步的目标是：
 
-- 给 `LoopResult` 增加最小 `error / failure path` 边界
-- 让 loop 不只会表达“正常结束”
-- 也开始能表达“异常结束”
+- 给 `LoopResult` 的 failure path 增加最小 `error_kind` 受限分类边界
+- 补一个最小 `recoverable / fatal` 区分
+- 让未来 retry / fallback 有明确落点
 
 ## 为什么这样做
 
-第 27 步已经让 loop 能表达：
-
-- `status`
-- `stop_reason`
-
-但当时只覆盖了 happy-path：
-
-- `completed`
-- `assistant_response`
-
-如果后面要扩展：
-- tool calling
-- provider error
-- retry
-- guardrail
-- multi-step orchestration
-
-那么 loop 一定要先具备最小失败边界。
-
-所以第 28 步先补最小 failure path：
+第 28 步已经让 loop 能表达：
 
 - `status = failed`
 - `stop_reason = provider_error`
-- `error = LoopError(...)`
+- `error = ...`
+
+但那时的 `error` 还只是最小字符串摘要，
+还不能稳定回答两个问题：
+
+1. 这类错误属于什么分类？
+2. 这类错误未来是否值得 retry / fallback？
+
+所以第 29 步先补最小失败语义：
+
+- `LoopErrorKind`
+- `recoverable`
 
 ## 当前新增结构
 
-- `LoopStatus`
-  - `COMPLETED`
-  - `FAILED`
-- `LoopStopReason`
-  - `ASSISTANT_RESPONSE`
+- `LoopErrorKind`
   - `PROVIDER_ERROR`
+  - `CONFIG_ERROR`
+  - `INTERNAL_ERROR`
 - `LoopError`
-  - `kind`
-  - `message`
+  - `kind: LoopErrorKind`
+  - `message: str`
+  - `recoverable: bool`
+
+## 当前最小分类规则
+
+- `RuntimeError` -> `provider_error`, `recoverable = True`
+- `ValueError` -> `config_error`, `recoverable = False`
+- 其他异常 -> `internal_error`, `recoverable = False`
 
 ## 行为约束
 
@@ -58,7 +55,8 @@
 
 ### 失败路径
 - `assistant_message = None`
-- `error` 包含最小错误摘要
+- `error.kind` 属于受限枚举
+- `error.recoverable` 明确表明未来是否适合 retry / fallback
 - 不伪造 assistant message
 - 不把失败当成 assistant reply 写回 session
 
@@ -78,23 +76,21 @@ source .venv/bin/activate
 pip install -e .
 
 # 成功路径
-myagent chat "hello from step28-success" --session-id step28-success
+myagent chat "hello from step29-success" --session-id step29-success
 
-# 失败路径（仅用于验证）
-myagent chat "hello from step28-failure" --session-id step28-failure --simulate-provider-error
+# provider_error / recoverable=True
+myagent chat "hello from step29-runtime" --session-id step29-runtime --simulate-provider-error --simulate-error-type runtime
+
+# config_error / recoverable=False
+myagent chat "hello from step29-value" --session-id step29-value --simulate-provider-error --simulate-error-type value
 ```
 
 ## 预期现象
 
-成功路径会显示：
-- `loop.result.status = completed`
-- `loop.result.stop_reason = assistant_response`
-- `loop.result.error.kind = None`
+你会看到失败路径里不只显示错误消息，
+还会显示：
 
-失败路径会显示：
-- `loop.result.status = failed`
-- `loop.result.stop_reason = provider_error`
-- `loop.result.error.kind = RuntimeError`
-- `assistant.message.role = None`
+- `loop.result.error.kind = provider_error | config_error | internal_error`
+- `loop.result.error.recoverable = True | False`
 
-这表示 loop 已开始具备最小 success / failure 两条语义边界。
+这表示 loop 的 failure path 已开始拥有未来 retry / fallback 所需要的最小分类边界。

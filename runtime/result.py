@@ -1,12 +1,13 @@
 """
 runtime/result.py
 
-这是第 28 步的 loop result 模块。
+这是第 29 步的 loop result 模块。
 
 目标：
 - 让 AgentLoop 的结果对象既能表示正常完成
 - 也能表示异常结束
-- 为后续扩展 tool / retry / guardrail / max_steps 预留失败语义边界
+- 并且为异常结束补上最小受限分类与可恢复性语义
+- 为后续扩展 retry / fallback / guardrail / max_steps 预留更稳定的落点
 
 当前保留的最小字段：
 - session_id
@@ -39,12 +40,21 @@ class LoopStopReason(StrEnum):
     PROVIDER_ERROR = "provider_error"
 
 
+class LoopErrorKind(StrEnum):
+    """一次 loop 失败时的最小受限错误分类。"""
+
+    PROVIDER_ERROR = "provider_error"
+    CONFIG_ERROR = "config_error"
+    INTERNAL_ERROR = "internal_error"
+
+
 @dataclass(slots=True)
 class LoopError:
     """表示一次 loop 执行中的最小错误信息。"""
 
-    kind: str
+    kind: LoopErrorKind
     message: str
+    recoverable: bool
 
 
 @dataclass(slots=True)

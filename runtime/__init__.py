@@ -1,7 +1,7 @@
 """
 runtime/__init__.py
 
-到了第 28 步，runtime 包继续暴露 context / session / workspace / policy / loop result 等能力。
+到了第 29 步，runtime 包继续暴露 context / session / workspace / policy / loop result 等能力。
 
 这样 runtime 里的职责拆分更清楚：
 - ContextBuilder：上下文装配
@@ -11,13 +11,20 @@ runtime/__init__.py
 - LoopResult：一次 loop 执行的结构化结果边界
 - LoopStatus / LoopStopReason：一次 loop 执行的最小结束语义
 - LoopError：一次 loop 执行的最小失败信息边界
+- LoopErrorKind：一次 loop 执行失败时的受限分类边界
 """
 
 from runtime.context import ContextBuilder
 from runtime.loop import AgentLoop
 from runtime.messages import Message
 from runtime.policy import ResponsePolicy, ResponseStyle
-from runtime.result import LoopError, LoopResult, LoopStatus, LoopStopReason
+from runtime.result import (
+    LoopError,
+    LoopErrorKind,
+    LoopResult,
+    LoopStatus,
+    LoopStopReason,
+)
 from runtime.session import Session
 from runtime.session_store import list_sessions, load_session, save_session
 from runtime.workspace_context import (
@@ -36,6 +43,7 @@ __all__ = [
     "LoopStatus",
     "LoopStopReason",
     "LoopError",
+    "LoopErrorKind",
     "Session",
     "save_session",
     "load_session",

@@ -3,9 +3,9 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 28 步，我们继续沿着 runtime 主线推进：
-给 LoopResult 加上最小 error / failure path 边界，
-让 loop 不只会表达“正常结束”，也开始能表达“异常结束”。
+到了第 29 步，我们继续沿着 runtime 主线推进：
+给 LoopResult 的 failure path 增加最小 error_kind / recoverable 边界，
+让 loop 不只知道“失败了”，还开始知道“这类失败未来是否值得 retry / fallback”。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
@@ -15,6 +15,7 @@ app/main.py
 - loop result：一次运行的结构化结果边界
 - loop status / stop reason：一次运行的最小结束语义
 - loop error：一次运行的最小失败信息边界
+- loop error kind：一次运行的最小受限失败分类边界
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from runtime import (
     AgentLoop,
     ContextBuilder,
     LoopError,
+    LoopErrorKind,
     LoopResult,
     LoopStatus,
     LoopStopReason,
@@ -46,12 +48,21 @@ from runtime import (
 
 
 class FailingProvider(BaseProvider):
-    """仅用于第 28 步本地验证 failure path 的最小 provider。"""
+    """仅用于本地验证 failure path 的最小 provider。"""
 
-    def __init__(self, error_message: str = "simulated provider failure") -> None:
+    def __init__(
+        self,
+        error_message: str = "simulated provider failure",
+        error_type: str = "runtime",
+    ) -> None:
         self.error_message = error_message
+        self.error_type = error_type
 
     def chat(self, prompt: str) -> str:
+        if self.error_type == "value":
+            raise ValueError(self.error_message)
+        if self.error_type == "internal":
+            raise KeyError(self.error_message)
         raise RuntimeError(self.error_message)
 
 
@@ -79,7 +90,11 @@ def chat(
     ),
     simulate_provider_error: bool = typer.Option(
         default=False,
-        help="仅用于验证第 28 步 failure path：模拟 provider 调用失败。",
+        help="仅用于验证 failure path：模拟 provider 调用失败。",
+    ),
+    simulate_error_type: str = typer.Option(
+        default="runtime",
+        help="仅用于验证 error_kind 分类：支持 runtime / value / internal。",
     ),
 ) -> None:
     """
@@ -88,7 +103,7 @@ def chat(
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
     if simulate_provider_error:
-        provider = FailingProvider()
+        provider = FailingProvider(error_type=simulate_error_type)
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
     requested_response_style = response_style or config.agent.response_style
@@ -147,6 +162,7 @@ def chat(
     print(f"agent.response_style.type = {ResponseStyle.__name__}")
     print(f"agent.response_style.fallback_used = {response_policy.fallback_used}")
     print(f"provider.simulated_error = {simulate_provider_error}")
+    print(f"provider.simulated_error_type = {simulate_error_type}")
     print("prompt.mode = sectioned")
     print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
     print("response.policy = ResponsePolicy")
@@ -173,16 +189,19 @@ def chat(
     print(f"loop.result.status_type = {LoopStatus.__name__}")
     print(f"loop.result.stop_reason_type = {LoopStopReason.__name__}")
     print(f"loop.result.error_type = {LoopError.__name__}")
+    print(f"loop.result.error_kind_type = {LoopErrorKind.__name__}")
     if loop_result.assistant_message is not None:
         print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
     else:
         print("loop.result.assistant_role = None")
     if loop_result.error is not None:
-        print(f"loop.result.error.kind = {loop_result.error.kind}")
+        print(f"loop.result.error.kind = {loop_result.error.kind.value}")
         print(f"loop.result.error.message = {loop_result.error.message}")
+        print(f"loop.result.error.recoverable = {loop_result.error.recoverable}")
     else:
         print("loop.result.error.kind = None")
         print("loop.result.error.message = None")
+        print("loop.result.error.recoverable = None")
     print(f"session.id = {session.id}")
     print(f"session.loaded_from_disk = {loaded_from_disk}")
     print(f"session.previous_message_count = {previous_message_count}")
