@@ -3,11 +3,11 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 8 步，程序不再只把“单条用户消息”交给 AgentLoop，
-而是开始构造一个最小 history（消息列表）作为上下文输入。
+到了第 9 步，程序不再把 history 作为一个临时列表直接传给 AgentLoop，
+而是先创建一个最小 Session 对象，
+再把用户消息追加进去。
 
-这意味着系统第一次从“处理一条消息”
-过渡到“处理一段最小对话上下文”。
+这表示系统开始拥有正式的“会话容器”。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from providers import make_provider
-from runtime import AgentLoop, Message
+from runtime import AgentLoop, Message, Session
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
 
@@ -32,8 +32,8 @@ def chat(message: str) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
 
-    到了第 8 步，这段输入会先被包装进最小 history，
-    然后再交给 AgentLoop。
+    到了第 9 步，这段输入会被追加进 Session，
+    然后 Session 会整体交给 AgentLoop。
 
     使用示例：
         myagent chat "hello"
@@ -42,8 +42,11 @@ def chat(message: str) -> None:
     provider = make_provider(config)
     loop = AgentLoop(provider=provider)
 
-    history = [Message(role="user", content=message)]
-    assistant_message = loop.run_once(history)
+    session = Session(id="local-dev-session")
+    session.add_message(Message(role="user", content=message))
+
+    assistant_message = loop.run_once(session)
+    latest_message = session.latest_message()
 
     print("myagent booted")
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
@@ -51,11 +54,15 @@ def chat(message: str) -> None:
     print(f"agent.workspace = {config.agent.workspace}")
     print(f"provider.name = {config.provider.name}")
     print(f"provider.model = {config.provider.model}")
-    print(f"history.length = {len(history)}")
-    print(f"history.last.role = {history[-1].role}")
-    print(f"history.last.content = {history[-1].content}")
+    print(f"session.id = {session.id}")
+    print(f"session.message_count = {len(session.messages)}")
+    print(f"session.first.role = {session.messages[0].role}")
+    print(f"session.first.content = {session.messages[0].content}")
     print(f"assistant.message.role = {assistant_message.role}")
     print(f"assistant.message.content = {assistant_message.content}")
+    if latest_message is not None:
+        print(f"session.latest.role = {latest_message.role}")
+        print(f"session.latest.content = {latest_message.content}")
 
 
 def main() -> None:

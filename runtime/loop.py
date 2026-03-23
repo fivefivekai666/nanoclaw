@@ -1,41 +1,44 @@
 """
 runtime/loop.py
 
-这是第 8 步的核心变化：
-AgentLoop 不再只处理“一条消息”，而是开始处理“最小消息历史（history）”。
+这是第 9 步的核心变化：
+AgentLoop 不再直接接收 history 列表，
+而是开始接收一个最小 Session 对象。
 
-为什么这一步重要？
-因为真正的 agent runtime 不是只看当前一句话，
-而是要在某种上下文中理解当前输入。
+为什么这样改？
+因为 history 已经不应该只是一个临时 list[Message] 了，
+它应该属于某个正式会话。
 
-在第 8 步我们先做最小版本：
-- 输入：list[Message]
-- 输出：一条 assistant Message
-- provider 仍然保持最小字符串接口
+所以到了第 9 步：
+- 输入从 list[Message] 升级为 Session
+- AgentLoop 基于 session.messages 构造 prompt
+- provider 返回结果后，assistant Message 会被追加回 session
 
-也就是说，这一步先让 runtime 学会“接 history”，
-再由 runtime 自己把 history 拼成一个最小 prompt 给 provider。
+这意味着系统第一次真正进入“会话驱动”的运行形态。
 """
 
 from __future__ import annotations
 
 from providers.base import BaseProvider
 from runtime.messages import Message
+from runtime.session import Session
 
 
 class AgentLoop:
     """
     AgentLoop 是 agent 运行时的最小主流程骨架。
 
-    到了第 8 步，它开始从“单条消息处理”进化为“最小上下文处理”。
+    到了第 9 步，它开始围绕 Session 工作。
     当前它的职责是：
-    1. 接收 history: list[Message]
-    2. 把历史消息拼成最小上下文文本
-    3. 调用 provider
-    4. 返回 assistant Message
+    1. 接收一个 Session
+    2. 读取 session.messages
+    3. 把消息历史拼成最小上下文文本
+    4. 调用 provider
+    5. 把 assistant 回复追加回 session
+    6. 返回 assistant Message
 
-    虽然这还不是完整 session / memory 系统，
-    但它已经让 runtime 第一次具备了“看前后文”的能力边界。
+    这样一来，消息列表不再只是一次性参数，
+    而是成为某个正式会话的一部分。
     """
 
     def __init__(self, provider: BaseProvider) -> None:
@@ -45,35 +48,36 @@ class AgentLoop:
         """
         把消息历史转换成一个最小可供 provider 使用的 prompt。
 
-        这里故意不用复杂模板，
-        只做最朴素的按顺序拼接：
+        这里仍然保持最朴素的拼接方式：
 
             user: ...
             assistant: ...
             user: ...
 
-        为什么先这样做？
-        因为第 8 步的核心目标是“引入 history 接口”，
-        不是一上来就设计复杂 prompt builder。
+        第 9 步的重点不是 prompt engineering，
+        而是把 history 正式纳入 Session 容器。
         """
         lines = [f"{message.role}: {message.content}" for message in history]
         return "\n".join(lines)
 
-    def run_once(self, history: list[Message]) -> Message:
+    def run_once(self, session: Session) -> Message:
         """
         执行一轮最小 agent 流程。
 
         输入：
-        - 一段消息历史 history
+        - 一个 Session
 
         输出：
         - 一条 assistant Message
 
         当前逻辑：
-        1. 用 history 构造 prompt
+        1. 用 session.messages 构造 prompt
         2. 调用 provider.chat(prompt)
         3. 把结果包装成 assistant Message
+        4. 将 assistant Message 追加回 session
         """
-        prompt = self._build_prompt_from_history(history)
+        prompt = self._build_prompt_from_history(session.messages)
         response_text = self.provider.chat(prompt)
-        return Message(role="assistant", content=response_text)
+        assistant_message = Message(role="assistant", content=response_text)
+        session.add_message(assistant_message)
+        return assistant_message
