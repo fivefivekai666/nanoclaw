@@ -1,20 +1,20 @@
 """
 runtime/loop.py
 
-这是第 5 步开始出现的 AgentLoop，
-到了第 7 步，它从“接收裸字符串”升级成“接收结构化 Message”。
+这是第 8 步的核心变化：
+AgentLoop 不再只处理“一条消息”，而是开始处理“最小消息历史（history）”。
 
-这是一个很关键的架构变化：
-- 以前：run_once(user_input: str) -> str
-- 现在：run_once(message: Message) -> Message
+为什么这一步重要？
+因为真正的 agent runtime 不是只看当前一句话，
+而是要在某种上下文中理解当前输入。
 
-这样做的好处是：
-1. runtime 内部的输入输出单位开始统一
-2. 后面更容易接 session / memory / tools
-3. provider 仍然可以先维持最小字符串接口，不必一下子重构太多层
+在第 8 步我们先做最小版本：
+- 输入：list[Message]
+- 输出：一条 assistant Message
+- provider 仍然保持最小字符串接口
 
-也就是说，第 7 步是在不打乱前面结构的前提下，
-让系统的数据模型开始正规化。
+也就是说，这一步先让 runtime 学会“接 history”，
+再由 runtime 自己把 history 拼成一个最小 prompt 给 provider。
 """
 
 from __future__ import annotations
@@ -27,34 +27,53 @@ class AgentLoop:
     """
     AgentLoop 是 agent 运行时的最小主流程骨架。
 
-    到了第 7 步，它的职责依然很小：
-    - 接收一条 Message
-    - 取出其中的文本内容
-    - 调用 provider
-    - 再把结果包装成 assistant Message 返回
+    到了第 8 步，它开始从“单条消息处理”进化为“最小上下文处理”。
+    当前它的职责是：
+    1. 接收 history: list[Message]
+    2. 把历史消息拼成最小上下文文本
+    3. 调用 provider
+    4. 返回 assistant Message
 
-    虽然目前底层 provider 还只是 `chat(prompt: str) -> str`，
-    但 runtime 层已经先完成了“消息对象化”。
-    这是后续架构演进的重要基础。
+    虽然这还不是完整 session / memory 系统，
+    但它已经让 runtime 第一次具备了“看前后文”的能力边界。
     """
 
     def __init__(self, provider: BaseProvider) -> None:
         self.provider = provider
 
-    def run_once(self, message: Message) -> Message:
+    def _build_prompt_from_history(self, history: list[Message]) -> str:
+        """
+        把消息历史转换成一个最小可供 provider 使用的 prompt。
+
+        这里故意不用复杂模板，
+        只做最朴素的按顺序拼接：
+
+            user: ...
+            assistant: ...
+            user: ...
+
+        为什么先这样做？
+        因为第 8 步的核心目标是“引入 history 接口”，
+        不是一上来就设计复杂 prompt builder。
+        """
+        lines = [f"{message.role}: {message.content}" for message in history]
+        return "\n".join(lines)
+
+    def run_once(self, history: list[Message]) -> Message:
         """
         执行一轮最小 agent 流程。
 
         输入：
-        - 一条 user Message
+        - 一段消息历史 history
 
         输出：
         - 一条 assistant Message
 
-        当前逻辑仍然非常简单：
-        1. 读取输入消息的 content
-        2. 调用 provider.chat(...)
-        3. 把返回文本包装成 assistant 消息
+        当前逻辑：
+        1. 用 history 构造 prompt
+        2. 调用 provider.chat(prompt)
+        3. 把结果包装成 assistant Message
         """
-        response_text = self.provider.chat(message.content)
+        prompt = self._build_prompt_from_history(history)
+        response_text = self.provider.chat(prompt)
         return Message(role="assistant", content=response_text)

@@ -3,15 +3,11 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 7 步，程序继续沿着“更像真正 agent runtime”的方向演进：
-- 第 6 步：CLI 能接收真实输入
-- 第 7 步：输入输出不再只是裸字符串，而是 Message 对象
+到了第 8 步，程序不再只把“单条用户消息”交给 AgentLoop，
+而是开始构造一个最小 history（消息列表）作为上下文输入。
 
-所以现在 main.py 的工作变成：
-1. 从 CLI 接收用户输入
-2. 把输入包装成 user Message
-3. 把 Message 交给 AgentLoop
-4. 接收 assistant Message 并打印出来
+这意味着系统第一次从“处理一条消息”
+过渡到“处理一段最小对话上下文”。
 """
 
 from __future__ import annotations
@@ -36,6 +32,9 @@ def chat(message: str) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
 
+    到了第 8 步，这段输入会先被包装进最小 history，
+    然后再交给 AgentLoop。
+
     使用示例：
         myagent chat "hello"
     """
@@ -43,8 +42,8 @@ def chat(message: str) -> None:
     provider = make_provider(config)
     loop = AgentLoop(provider=provider)
 
-    user_message = Message(role="user", content=message)
-    assistant_message = loop.run_once(user_message)
+    history = [Message(role="user", content=message)]
+    assistant_message = loop.run_once(history)
 
     print("myagent booted")
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
@@ -52,8 +51,9 @@ def chat(message: str) -> None:
     print(f"agent.workspace = {config.agent.workspace}")
     print(f"provider.name = {config.provider.name}")
     print(f"provider.model = {config.provider.model}")
-    print(f"user.message.role = {user_message.role}")
-    print(f"user.message.content = {user_message.content}")
+    print(f"history.length = {len(history)}")
+    print(f"history.last.role = {history[-1].role}")
+    print(f"history.last.content = {history[-1].content}")
     print(f"assistant.message.role = {assistant_message.role}")
     print(f"assistant.message.content = {assistant_message.content}")
 

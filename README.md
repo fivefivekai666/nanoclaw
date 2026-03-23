@@ -1,17 +1,17 @@
-# myagent · Step 7
+# myagent · Step 8
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 7 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 8 步。
 
 ## 这一步在做什么
 
-第 7 步的目标是：
+第 8 步的目标是：
 
-- 把 runtime 的输入输出单位
-- 从“裸字符串”升级成“结构化 Message 对象”
+- 把 AgentLoop 的输入
+- 从“单条 Message”升级成“消息列表 history”
 
-这是一个很重要的架构转折。
-因为以后 session、memory、tools、subagents 都不会喜欢只处理纯字符串，
-它们更适合围绕统一的数据模型来扩展。
+这代表系统开始拥有最小的“短期上下文”能力。
+虽然现在还没有 session manager，也没有长期 memory，
+但 runtime 已经不再只能看当前这一句话了。
 
 ## 当前启动流程
 
@@ -22,21 +22,23 @@ myagent chat "hello"
   ↓
 main.py
   ↓
-Message(role="user", content=...)
+history = [Message(role="user", content=...)]
   ↓
-AgentLoop.run_once(message)
+AgentLoop.run_once(history)
   ↓
-provider.chat(message.content)
+_build_prompt_from_history(history)
+  ↓
+provider.chat(prompt)
   ↓
 Message(role="assistant", content=...)
 ```
 
 ## 你会学到什么
 
-1. 为什么 agent runtime 不能长期依赖裸字符串
-2. 为什么要先定义最小 Message Model
-3. 为什么 `role + content` 是第一批核心字段
-4. 数据模型统一后，后续模块会更容易衔接
+1. 为什么对话系统不能只处理单条消息
+2. history 和 memory 的区别
+3. 为什么先让 runtime 接收 history，再考虑重写 provider 接口
+4. 如何把最小上下文拼接成 prompt
 
 ## 运行方式
 
@@ -45,7 +47,7 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step7"
+myagent chat "hello from step8"
 ```
 
 ## 预期输出
@@ -57,8 +59,9 @@ agent.name = myagent
 agent.workspace = ./workspace
 provider.name = mock
 provider.model = mock-echo-v1
-user.message.role = user
-user.message.content = hello from step7
+history.length = 1
+history.last.role = user
+history.last.content = hello from step8
 assistant.message.role = assistant
-assistant.message.content = [mock-provider:mock-echo-v1] you said: hello from step7
+assistant.message.content = [mock-provider:mock-echo-v1] you said: user: hello from step8
 ```
