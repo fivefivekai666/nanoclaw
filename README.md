@@ -1,15 +1,17 @@
-# myagent · Step 6
+# myagent · Step 7
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 6 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 7 步。
 
 ## 这一步在做什么
 
-第 6 步的目标是：
+第 7 步的目标是：
 
-- 把输入从“写死在代码里”
-- 升级成“从命令行真实传入”
+- 把 runtime 的输入输出单位
+- 从“裸字符串”升级成“结构化 Message 对象”
 
-也就是说，程序终于开始能被真正使用，而不是每次都去修改源码里的测试字符串。
+这是一个很重要的架构转折。
+因为以后 session、memory、tools、subagents 都不会喜欢只处理纯字符串，
+它们更适合围绕统一的数据模型来扩展。
 
 ## 当前启动流程
 
@@ -20,21 +22,21 @@ myagent chat "hello"
   ↓
 main.py
   ↓
-load_config()
+Message(role="user", content=...)
   ↓
-make_provider(config)
+AgentLoop.run_once(message)
   ↓
-AgentLoop(provider)
+provider.chat(message.content)
   ↓
-loop.run_once(message)
+Message(role="assistant", content=...)
 ```
 
 ## 你会学到什么
 
-1. 为什么 agent 需要真实输入入口
-2. 如何用 Typer 把 Python 函数变成 CLI 命令
-3. 如何把 CLI 输入一路传到 AgentLoop
-4. 为什么 CLI 是后续 API / channel 输入入口的原型
+1. 为什么 agent runtime 不能长期依赖裸字符串
+2. 为什么要先定义最小 Message Model
+3. 为什么 `role + content` 是第一批核心字段
+4. 数据模型统一后，后续模块会更容易衔接
 
 ## 运行方式
 
@@ -43,7 +45,7 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step6"
+myagent chat "hello from step7"
 ```
 
 ## 预期输出
@@ -55,6 +57,8 @@ agent.name = myagent
 agent.workspace = ./workspace
 provider.name = mock
 provider.model = mock-echo-v1
-user.message = hello from step6
-loop.response = [mock-provider:mock-echo-v1] you said: hello from step6
+user.message.role = user
+user.message.content = hello from step7
+assistant.message.role = assistant
+assistant.message.content = [mock-provider:mock-echo-v1] you said: hello from step7
 ```

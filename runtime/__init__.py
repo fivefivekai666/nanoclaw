@@ -1,18 +1,14 @@
 """
 runtime/__init__.py
 
-runtime 包从第 5 步开始不再只是“占位目录”，
-而是正式暴露一个真正参与运行的核心对象：
+到了第 7 步，runtime 包正式暴露两个核心对象：
+- AgentLoop：负责主流程控制
+- Message：负责统一消息数据结构
 
-- AgentLoop
-
-这意味着项目的职责分层开始更清晰：
-- app/        负责启动入口
-- config/     负责配置定义与加载
-- providers/  负责模型适配
-- runtime/    负责主流程控制
+这意味着系统开始拥有“流程层 + 数据模型层”的最小组合。
 """
 
 from runtime.loop import AgentLoop
+from runtime.messages import Message
 
-__all__ = ["AgentLoop"]
+__all__ = ["AgentLoop", "Message"]
