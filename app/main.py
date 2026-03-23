@@ -3,13 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 10 步，系统第一次拥有最小会话持久化能力：
-- 启动时尝试 load 旧 session
-- 若不存在则创建新 session
-- 执行一轮 agent 处理后再 save 回磁盘
+这一版的重要变化是：
+- session id 不再写死在代码常量里
+- 默认值来自配置文件
+- CLI 可以用 --session-id 显式覆盖默认值
 
-这意味着 session 不再只活在内存里，
-而是可以真正“落盘并恢复”。
+这意味着同一个程序现在可以自然管理多个会话，
+而不是永远只绑死在 local-dev-session 上。
 """
 
 from __future__ import annotations
@@ -24,9 +24,6 @@ from runtime import AgentLoop, Message, Session, load_session, save_session
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
 
-SESSION_ID = "local-dev-session"
-SESSION_DIR = Path("workspace/sessions")
-
 
 @app.callback()
 def main_callback() -> None:
@@ -35,36 +32,52 @@ def main_callback() -> None:
 
 
 @app.command()
-def chat(message: str) -> None:
+def chat(
+    message: str,
+    session_id: str | None = typer.Option(
+        default=None,
+        help="要使用的 session id；若不传，则使用配置文件中的默认值。",
+    ),
+) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
 
-    到了第 10 步，这段流程会先尝试恢复旧 session，
-    然后在处理完成后把更新后的 session 保存回磁盘。
+    当前行为：
+    1. 读取配置
+    2. 决定实际 session_id（CLI 覆盖 config 默认值）
+    3. 尝试加载该 session
+    4. 若不存在则创建新 session
+    5. 运行一轮 agent 并保存回磁盘
 
     使用示例：
         myagent chat "hello"
+        myagent chat "hello" --session-id demo-a
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
     loop = AgentLoop(provider=provider)
 
-    session = load_session(SESSION_ID, SESSION_DIR)
+    effective_session_id = session_id or config.agent.default_session_id
+    session_dir = Path(config.agent.session_dir)
+
+    session = load_session(effective_session_id, session_dir)
     loaded_from_disk = session is not None
     if session is None:
-        session = Session(id=SESSION_ID)
+        session = Session(id=effective_session_id)
 
     previous_message_count = len(session.messages)
     session.add_message(Message(role="user", content=message))
 
     assistant_message = loop.run_once(session)
-    saved_path = save_session(session, SESSION_DIR)
+    saved_path = save_session(session, session_dir)
     latest_message = session.latest_message()
 
     print("myagent booted")
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
     print(f"agent.name = {config.agent.name}")
     print(f"agent.workspace = {config.agent.workspace}")
+    print(f"agent.default_session_id = {config.agent.default_session_id}")
+    print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")
     print(f"provider.model = {config.provider.model}")
     print(f"session.id = {session.id}")

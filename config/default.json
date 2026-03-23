@@ -2,7 +2,9 @@
   "agent": {
     "name": "myagent",
     "workspace": "./workspace",
-    "system_prompt": "You are a helpful assistant."
+    "system_prompt": "You are a helpful assistant.",
+    "default_session_id": "local-dev-session",
+    "session_dir": "workspace/sessions"
   },
   "provider": {
     "name": "mock",
