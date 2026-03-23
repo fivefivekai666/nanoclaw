@@ -3,12 +3,14 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 21 步，我们优先完善 prompt 结构，
-让 loop 的输入从“拼接出来的上下文文本”升级为“固定 section 模板”。
+到了第 22 步，我们继续完善 loop 的可维护性：
+把 [INSTRUCTION] section 从 ContextBuilder 中拆出，
+升级成独立的 runtime response policy 层。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
 - memory provider：memory 来源与最小清洗边界
+- response policy：回答规则边界
 - context builder：稳定的 section-based prompt 装配边界
 """
 
@@ -25,6 +27,7 @@ from runtime import (
     AgentLoop,
     ContextBuilder,
     Message,
+    ResponsePolicy,
     Session,
     list_sessions,
     load_session,
@@ -58,12 +61,14 @@ def chat(
     provider = make_provider(config)
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
+    response_policy = ResponsePolicy()
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
         identity_role=config.agent.identity_role,
         persona_style=config.agent.persona_style,
         memory_provider=memory_provider,
+        response_policy=response_policy,
         workspace_context=workspace_context,
     )
     loop = AgentLoop(provider=provider, context_builder=context_builder)
@@ -105,6 +110,7 @@ def chat(
     print(f"agent.persona_style = {config.agent.persona_style}")
     print("prompt.mode = sectioned")
     print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
+    print("response.policy = ResponsePolicy")
     print(f"workspace.identity.loaded = {bool(workspace_context.identity_text)}")
     print(f"workspace.identity.structured = {structured_identity_loaded}")
     print(f"workspace.identity.name = {parsed_identity.name}")

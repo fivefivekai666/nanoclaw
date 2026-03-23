@@ -1,28 +1,21 @@
 """
 runtime/context.py
 
-这是第 21 步的 ContextBuilder。
+这是第 22 步的 ContextBuilder。
 
-这一版的核心目标不是增加更多上下文来源，
-而是把已有上下文整理成稳定、固定、可扩展的 prompt 模板。
+这一版的重点不是新增上下文来源，
+而是继续梳理职责边界：
+- ContextBuilder 负责组织上下文内容
+- ResponsePolicy 负责组织回答规则
 
-从这一版开始，prompt 会使用明确的 section：
-- [SYSTEM]
-- [IDENTITY]
-- [WORKSPACE]
-- [MEMORY]
-- [CONVERSATION]
-- [INSTRUCTION]
-
-这样做的意义是：
-- loop 每轮输入结构稳定
-- 调试时更容易定位问题
-- 后面加入 tools / safety / recalled memory 时有明确插槽
+从这一版开始，[INSTRUCTION] 不再由 ContextBuilder 内部硬编码，
+而是来自独立的 runtime response policy 层。
 """
 
 from __future__ import annotations
 
 from memory.base import MemoryProvider
+from runtime.policy import ResponsePolicy
 from runtime.session import Session
 from runtime.workspace_context import WorkspaceContext
 
@@ -38,7 +31,7 @@ class ContextBuilder:
     - workspace soul（原文）
     - memory block（来自 memory provider）
     - session.messages
-    - 最终响应指令
+    - instruction section（来自 response policy）
 
     组合成 provider 可消费的一段稳定 prompt 文本。
     """
@@ -50,6 +43,7 @@ class ContextBuilder:
         identity_role: str,
         persona_style: str,
         memory_provider: MemoryProvider,
+        response_policy: ResponsePolicy,
         workspace_context: WorkspaceContext | None = None,
     ) -> None:
         self.system_prompt = system_prompt
@@ -57,6 +51,7 @@ class ContextBuilder:
         self.identity_role = identity_role
         self.persona_style = persona_style
         self.memory_provider = memory_provider
+        self.response_policy = response_policy
         self.workspace_context = workspace_context or WorkspaceContext()
 
     def _build_identity_section(self) -> list[str]:
@@ -127,15 +122,6 @@ class ContextBuilder:
             lines.append(f"{message.role}: {message.content}")
         return lines
 
-    def _build_instruction_section(self) -> list[str]:
-        return [
-            "[INSTRUCTION]",
-            "Respond as the assistant.",
-            "Use the sections above as your operating context.",
-            "Ground your answer in the provided context and conversation.",
-            "Do not repeat the section headers unless they are directly relevant to the reply.",
-        ]
-
     def build(self, session: Session) -> str:
         """根据 session 构造一段稳定的 section-based prompt。"""
         sections: list[list[str]] = [
@@ -144,7 +130,7 @@ class ContextBuilder:
             self._build_workspace_section(),
             self._build_memory_section(session),
             self._build_conversation_section(session),
-            self._build_instruction_section(),
+            self.response_policy.build_instruction_lines(),
         ]
 
         lines: list[str] = []

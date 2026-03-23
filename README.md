@@ -1,66 +1,61 @@
-# myagent · Step 21
+# myagent · Step 22
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 21 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 22 步。
 
 ## 这一步在做什么
 
-第 21 步的目标是：
+第 22 步的目标是：
 
-- 不再只是把上下文内容顺着往下拼
-- 把 prompt 升级成固定的 section 模板
-- 让 loop 每轮都收到结构稳定、边界清晰的输入
+- 不再让 `ContextBuilder` 自己硬编码 `[INSTRUCTION]`
+- 把响应规则升级成独立的 runtime response policy 层
+- 让“上下文内容”和“回答规则”职责分离
 
 ## 为什么这样做
 
-当前系统已经有：
-- config identity / persona
-- workspace persona
-- memory provider
-- session history
+第 21 步已经把 prompt 做成固定 section 模板。
+但其中 `[INSTRUCTION]` 仍然是写死在 `ContextBuilder` 里的。
 
-如果只是继续把这些内容往 prompt 里堆，
-短期虽然能跑，但后面一旦加：
-- tools
-- safety rules
-- recalled memory
-- response formatting
+这意味着一个模块同时负责：
+- 上下文装配
+- 回答规则装配
 
-就会越来越乱。
+这两个职责虽然相关，但不应该绑死在一起。
 
-所以第 21 步先把“结构”做稳。
+所以第 22 步继续拆分边界：
 
-## 当前 prompt 结构
+```text
+ContextBuilder -> 负责上下文内容
+ResponsePolicy -> 负责回答规则
+```
+
+## 当前结构
+
+```text
+provider
+memory provider
+response policy
+context builder
+agent loop
+```
+
+以及 prompt 仍保持：
 
 ```text
 [SYSTEM]
-...
-
 [IDENTITY]
-...
-
 [WORKSPACE]
-...
-
 [MEMORY]
-...
-
 [CONVERSATION]
-...
-
 [INSTRUCTION]
-...
 ```
 
-## 这样做的好处
-
-- loop 输入更稳定
-- 更容易调试 prompt
-- 后续扩展时有明确插槽
-- 模型更容易区分：长期规则 / 工作区人格 / memory / 当前对话 / 输出要求
+只是 `[INSTRUCTION]` 现在来自 `ResponsePolicy`。
 
 ## 修改模块
 
+- 新增：`runtime/policy.py`
 - 修改：`runtime/context.py`
+- 修改：`runtime/__init__.py`
 - 修改：`app/main.py`
 - 修改：`README.md`
 
@@ -70,13 +65,12 @@
 cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step21" --session-id step21
+myagent chat "hello from step22" --session-id step22
 ```
 
 ## 预期现象
 
 - 输出里会显示：
-  - `prompt.mode = sectioned`
-  - `prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION`
-- mock provider 回显里能清楚看到各 section 边界
-- loop 仍然可以正常跑通
+  - `response.policy = ResponsePolicy`
+- mock provider 回显里仍然有 `[INSTRUCTION]`
+- loop 继续稳定可跑
