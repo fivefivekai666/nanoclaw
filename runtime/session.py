@@ -1,28 +1,22 @@
 """
 runtime/session.py
 
-这是第 9 步新增的核心文件：最小 Session（会话）对象。
+这是第 9 步引入的最小 Session（会话）对象。
 
-为什么需要它？
-因为到了第 8 步，runtime 虽然已经能处理 history，
-但 history 仍然只是 main.py 里临时构造的 list[Message]。
+到了第 10 步，它仍然只负责“数据结构本身”：
+- id
+- messages
+- add_message(...)
+- latest_message()
 
-这意味着：
-- 上下文存在了
-- 但上下文还没有“归属”
-- 还没有一个正式对象来持有整段对话
+注意：
+第 10 步虽然加入了持久化能力，
+但持久化逻辑被放在 `runtime/session_store.py`，
+而不是塞进 Session 类本身。
 
-所以第 9 步要做的事情是：
-把 history 挂到一个 Session 容器上。
-
-当前保持最小实现：
-- id: 会话标识
-- messages: 当前会话中的消息列表
-- add_message(...): 追加消息
-- latest_message(): 读取最后一条消息
-
-先把“会话容器”这个概念建立起来，
-后面再做持久化、恢复、裁剪、总结。
+这是为了保持分层清晰：
+- Session = 会话是什么
+- SessionStore = 会话存哪里
 """
 
 from __future__ import annotations
@@ -41,8 +35,8 @@ class Session(BaseModel):
     - 提供最小追加能力
     - 提供读取最后一条消息的能力
 
-    这一步还不负责磁盘保存，也不负责多会话管理，
-    只负责让“消息历史”第一次拥有正式宿主。
+    它不直接负责磁盘 I/O。
+    持久化由外部 store 处理。
     """
 
     id: str = Field(description="会话 ID")

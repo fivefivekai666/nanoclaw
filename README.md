@@ -1,18 +1,18 @@
-# myagent · Step 9
+# myagent · Step 10
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 9 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 10 步。
 
 ## 这一步在做什么
 
-第 9 步的目标是：
+第 10 步的目标是：
 
-- 把 `history` 从临时消息列表
-- 升级为正式的 `Session.messages`
+- 给 `Session` 加上最小持久化能力
+- 让会话可以 save / load
+- 让对话第一次真正落盘
 
-也就是说，系统开始有了“会话容器”。
-
-第 8 步解决的是：runtime 能处理最小上下文。
-第 9 步解决的是：这段上下文开始有正式宿主。
+这里采用最简单、最适合教学的方案：
+- 一个 session 对应一个 JSON 文件
+- 默认目录：`workspace/sessions/`
 
 ## 当前启动流程
 
@@ -21,29 +21,25 @@ CLI 参数
   ↓
 myagent chat "hello"
   ↓
-main.py
+尝试 load_session("local-dev-session")
   ↓
-创建 Session(id="local-dev-session")
+若不存在则创建新 Session
   ↓
 session.add_message(Message(role="user", content=...))
   ↓
 AgentLoop.run_once(session)
   ↓
-_build_prompt_from_history(session.messages)
-  ↓
-provider.chat(prompt)
-  ↓
-生成 assistant Message
-  ↓
 session.add_message(assistant_message)
+  ↓
+save_session(session)
 ```
 
 ## 你会学到什么
 
-1. 为什么 history 需要正式容器
-2. 为什么 Session 比裸 `list[Message]` 更适合作为 runtime 输入
-3. 为什么追加消息是 Session 的第一核心能力
-4. 为什么现在先做 Session，而不是直接上 SessionManager / 持久化
+1. 为什么 Session 如果不落盘，就只是内存 demo
+2. 为什么教学阶段最适合先用 JSON 文件持久化
+3. 为什么 Session 和 SessionStore 应该分层
+4. 为什么 save/load 是后续 SessionManager 的前身
 
 ## 运行方式
 
@@ -52,24 +48,18 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step9"
+myagent chat "hello from step10"
+myagent chat "hello again from step10"
 ```
 
-## 预期输出
+## 预期现象
 
-```text
-myagent booted
-loaded config from = config/default.json
-agent.name = myagent
-agent.workspace = ./workspace
-provider.name = mock
-provider.model = mock-echo-v1
-session.id = local-dev-session
-session.message_count = 2
-session.first.role = user
-session.first.content = hello from step9
-assistant.message.role = assistant
-assistant.message.content = [mock-provider:mock-echo-v1] you said: user: hello from step9
-session.latest.role = assistant
-session.latest.content = [mock-provider:mock-echo-v1] you said: user: hello from step9
-```
+第一次运行：
+- `session.loaded_from_disk = False`
+- `session.previous_message_count = 0`
+- 会创建 `workspace/sessions/local-dev-session.json`
+
+第二次运行：
+- `session.loaded_from_disk = True`
+- `session.previous_message_count` 会大于 0
+- 表示旧会话已成功从磁盘恢复

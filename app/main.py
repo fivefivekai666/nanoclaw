@@ -3,22 +3,29 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 9 步，程序不再把 history 作为一个临时列表直接传给 AgentLoop，
-而是先创建一个最小 Session 对象，
-再把用户消息追加进去。
+到了第 10 步，系统第一次拥有最小会话持久化能力：
+- 启动时尝试 load 旧 session
+- 若不存在则创建新 session
+- 执行一轮 agent 处理后再 save 回磁盘
 
-这表示系统开始拥有正式的“会话容器”。
+这意味着 session 不再只活在内存里，
+而是可以真正“落盘并恢复”。
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from providers import make_provider
-from runtime import AgentLoop, Message, Session
+from runtime import AgentLoop, Message, Session, load_session, save_session
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
+
+SESSION_ID = "local-dev-session"
+SESSION_DIR = Path("workspace/sessions")
 
 
 @app.callback()
@@ -32,8 +39,8 @@ def chat(message: str) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
 
-    到了第 9 步，这段输入会被追加进 Session，
-    然后 Session 会整体交给 AgentLoop。
+    到了第 10 步，这段流程会先尝试恢复旧 session，
+    然后在处理完成后把更新后的 session 保存回磁盘。
 
     使用示例：
         myagent chat "hello"
@@ -42,10 +49,16 @@ def chat(message: str) -> None:
     provider = make_provider(config)
     loop = AgentLoop(provider=provider)
 
-    session = Session(id="local-dev-session")
+    session = load_session(SESSION_ID, SESSION_DIR)
+    loaded_from_disk = session is not None
+    if session is None:
+        session = Session(id=SESSION_ID)
+
+    previous_message_count = len(session.messages)
     session.add_message(Message(role="user", content=message))
 
     assistant_message = loop.run_once(session)
+    saved_path = save_session(session, SESSION_DIR)
     latest_message = session.latest_message()
 
     print("myagent booted")
@@ -55,9 +68,10 @@ def chat(message: str) -> None:
     print(f"provider.name = {config.provider.name}")
     print(f"provider.model = {config.provider.model}")
     print(f"session.id = {session.id}")
+    print(f"session.loaded_from_disk = {loaded_from_disk}")
+    print(f"session.previous_message_count = {previous_message_count}")
     print(f"session.message_count = {len(session.messages)}")
-    print(f"session.first.role = {session.messages[0].role}")
-    print(f"session.first.content = {session.messages[0].content}")
+    print(f"session.saved_path = {saved_path}")
     print(f"assistant.message.role = {assistant_message.role}")
     print(f"assistant.message.content = {assistant_message.content}")
     if latest_message is not None:
