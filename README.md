@@ -1,28 +1,32 @@
-# myagent · Step 14
+# myagent · Step 15
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 14 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 15 步。
 
 ## 这一步在做什么
 
-第 14 步的目标是：
+第 15 步的目标是：
 
-- 抽出最小 `ContextBuilder`
-- 把 prompt 构造逻辑从 `AgentLoop` 中拆出来
-- 让 runtime 开始形成更清晰的职责分层
+- 把 agent 的 identity / persona 正式接入 `ContextBuilder`
+- 让 provider 输入不再只是“规则 + 历史”
+- 而是升级为“规则 + 身份/风格 + 历史”
 
-当前不新增业务能力，只做结构整理：
+当前通过 config 注入三项最小信息：
 
-- `AgentLoop` 负责流程推进
-- `ContextBuilder` 负责构造 provider 输入
+- `identity_name`
+- `identity_role`
+- `persona_style`
 
 ## 当前结构
 
 ```text
-config.agent.system_prompt
+system_prompt
+identity_name
+identity_role
+persona_style
   ↓
 ContextBuilder
   ↓
-build(session) -> prompt
+prompt
   ↓
 AgentLoop
   ↓
@@ -31,10 +35,10 @@ provider.chat(prompt)
 
 ## 你会学到什么
 
-1. 为什么 prompt 构造不应该一直塞在 loop 里
-2. 为什么 ContextBuilder 是后续 memory / tools / identity 的自然挂载点
-3. 为什么“功能没变，但结构更清晰”本身就是一次重要升级
-4. 如何做最小职责拆分而不引入过度设计
+1. 为什么 `system_prompt` 和 `identity/persona` 应该分层理解
+2. 为什么 agent 不只是运行规则，还需要身份描述
+3. 为什么 ContextBuilder 是承接 agent 自我描述的自然入口
+4. 为什么第 15 步先走 config 注入，比直接读 `IDENTITY.md` 更稳
 
 ## 运行方式
 
@@ -43,13 +47,18 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step14" --session-id step14
+myagent chat "hello from step15" --session-id step15
 ```
 
 ## 预期现象
 
-- 功能行为与第 13 步基本一致
-- mock provider 的回显仍然会包含：
-  - `system: You are a helpful assistant.`
-  - `user: hello from step14`
-- 但代码结构已经从“loop 内部拼 prompt”升级为“ContextBuilder 专职构造 prompt”
+- 输出里会显示：
+  - `agent.identity_name`
+  - `agent.identity_role`
+  - `agent.persona_style`
+- mock provider 的回显内容里会包含：
+  - `identity:`
+  - `- name: myagent`
+  - `- role: teaching-oriented agent runtime`
+  - `- style: clear, calm, structured`
+- 这说明 identity / persona 已真实进入 provider 输入链路

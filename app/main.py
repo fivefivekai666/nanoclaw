@@ -3,13 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 14 步，chat 主流程不再直接把 system_prompt 传给 AgentLoop，
-而是先创建一个 ContextBuilder，再把它交给 AgentLoop。
+到了第 15 步，chat 主流程在创建 ContextBuilder 时，
+除了 system_prompt 之外，也会把 identity / persona 一并传入。
 
-这意味着主流程装配开始显式体现：
-- provider 是模型调用层
-- context_builder 是上下文构造层
-- AgentLoop 是运行流程层
+这意味着 runtime 的上下文构造已经开始显式区分：
+- 规则层（system_prompt）
+- 角色层（identity / persona）
+- 对话层（session history）
 """
 
 from __future__ import annotations
@@ -54,7 +54,12 @@ def chat(
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
-    context_builder = ContextBuilder(system_prompt=config.agent.system_prompt)
+    context_builder = ContextBuilder(
+        system_prompt=config.agent.system_prompt,
+        identity_name=config.agent.identity_name,
+        identity_role=config.agent.identity_role,
+        persona_style=config.agent.persona_style,
+    )
     loop = AgentLoop(provider=provider, context_builder=context_builder)
 
     effective_session_id = session_id or config.agent.default_session_id
@@ -77,6 +82,9 @@ def chat(
     print(f"agent.name = {config.agent.name}")
     print(f"agent.workspace = {config.agent.workspace}")
     print(f"agent.system_prompt = {config.agent.system_prompt}")
+    print(f"agent.identity_name = {config.agent.identity_name}")
+    print(f"agent.identity_role = {config.agent.identity_role}")
+    print(f"agent.persona_style = {config.agent.persona_style}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")

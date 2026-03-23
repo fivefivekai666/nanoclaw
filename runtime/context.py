@@ -1,21 +1,20 @@
 """
 runtime/context.py
 
-这是第 14 步引入的最小 ContextBuilder。
+这是最小 ContextBuilder。
 
-为什么要单独抽这个模块？
-因为 AgentLoop 的职责应该是“推进运行流程”，
-而不是同时负责“怎样拼 prompt”。
+到了第 15 步，它不再只负责：
+- system_prompt
+- session history
 
-所以从第 14 步开始：
-- AgentLoop 负责 orchestration（编排）
-- ContextBuilder 负责 context construction（上下文构造）
+还开始正式接入 agent 的 identity / persona：
+- identity_name
+- identity_role
+- persona_style
 
-当前仍然只做最小能力：
-1. 注入 system prompt
-2. 序列化 session 历史
-
-后面 identity / memory / tools / channel metadata 都可以自然继续挂在这里。
+这意味着 provider 接收到的上下文，
+已经不只是“规则 + 历史”，
+而是开始拥有“角色 + 风格 + 历史”。
 """
 
 from __future__ import annotations
@@ -27,15 +26,25 @@ class ContextBuilder:
     """
     最小上下文构造器。
 
-    当前只负责把：
+    当前负责把：
     - system_prompt
+    - identity / persona
     - session.messages
 
     组合成 provider 可消费的一段 prompt 文本。
     """
 
-    def __init__(self, system_prompt: str) -> None:
+    def __init__(
+        self,
+        system_prompt: str,
+        identity_name: str,
+        identity_role: str,
+        persona_style: str,
+    ) -> None:
         self.system_prompt = system_prompt
+        self.identity_name = identity_name
+        self.identity_role = identity_role
+        self.persona_style = persona_style
 
     def build(self, session: Session) -> str:
         """
@@ -45,10 +54,22 @@ class ContextBuilder:
 
             system: ...
 
+            identity:
+            - name: ...
+            - role: ...
+            - style: ...
+
             user: ...
             assistant: ...
-            user: ...
         """
-        lines: list[str] = [f"system: {self.system_prompt}", ""]
+        lines: list[str] = [
+            f"system: {self.system_prompt}",
+            "",
+            "identity:",
+            f"- name: {self.identity_name}",
+            f"- role: {self.identity_role}",
+            f"- style: {self.persona_style}",
+            "",
+        ]
         lines.extend(f"{message.role}: {message.content}" for message in session.messages)
         return "\n".join(lines)

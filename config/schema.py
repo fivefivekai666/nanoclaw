@@ -1,17 +1,18 @@
 """
 config/schema.py
 
-这是项目第 2 步正式引入的配置对象定义文件。
+这是项目的配置对象定义文件。
 
-到了这一步，配置继续从“静态展示”向“真实运行参数”演进。
-除了 provider 和 agent 的基础信息，我们现在还把默认 session 行为纳入配置：
-- 默认 session_id
-- session 文件目录
+到了第 15 步，agent 配置不再只包含“运行规则”和“会话参数”，
+还开始正式包含一层最小 identity / persona 信息：
+- identity_name
+- identity_role
+- persona_style
 
 这样做的意义是：
-- 不再把会话标识写死在 main.py
-- 让“默认跑哪个会话”成为正式可配置项
-- 同时保留 CLI 覆盖能力
+- 让 agent 不只是“会运行的程序”
+- 也开始拥有“它是谁、以什么风格说话”的正式配置入口
+- 并且这些信息可以通过 ContextBuilder 注入到模型输入中
 """
 
 from pydantic import BaseModel, Field
@@ -47,6 +48,21 @@ class AgentSettings(BaseModel):
     system_prompt: str = Field(
         default="You are a helpful assistant.",
         description="最基础的默认系统提示词。",
+    )
+
+    identity_name: str = Field(
+        default="myagent",
+        description="agent 的身份名称。",
+    )
+
+    identity_role: str = Field(
+        default="teaching-oriented agent runtime",
+        description="agent 的角色定位描述。",
+    )
+
+    persona_style: str = Field(
+        default="clear, calm, structured",
+        description="agent 的表达风格描述。",
     )
 
     default_session_id: str = Field(

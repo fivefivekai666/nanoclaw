@@ -3,6 +3,9 @@
     "name": "myagent",
     "workspace": "./workspace",
     "system_prompt": "You are a helpful assistant.",
+    "identity_name": "myagent",
+    "identity_role": "teaching-oriented agent runtime",
+    "persona_style": "clear, calm, structured",
     "default_session_id": "local-dev-session",
     "session_dir": "workspace/sessions"
   },
