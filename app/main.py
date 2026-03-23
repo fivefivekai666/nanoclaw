@@ -3,13 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 20 步，memory 仍然来自 workspace/MEMORY.md，
-但 FileMemoryProvider 已不再原文直塞，而是先做最小结构化清洗。
+到了第 21 步，我们优先完善 prompt 结构，
+让 loop 的输入从“拼接出来的上下文文本”升级为“固定 section 模板”。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
 - memory provider：memory 来源与最小清洗边界
-- context builder：上下文装配边界
+- context builder：稳定的 section-based prompt 装配边界
 """
 
 from __future__ import annotations
@@ -103,6 +103,8 @@ def chat(
     print(f"agent.identity_name = {config.agent.identity_name}")
     print(f"agent.identity_role = {config.agent.identity_role}")
     print(f"agent.persona_style = {config.agent.persona_style}")
+    print("prompt.mode = sectioned")
+    print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
     print(f"workspace.identity.loaded = {bool(workspace_context.identity_text)}")
     print(f"workspace.identity.structured = {structured_identity_loaded}")
     print(f"workspace.identity.name = {parsed_identity.name}")
