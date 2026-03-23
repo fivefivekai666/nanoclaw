@@ -3,13 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 18 步，memory placeholder 不再直接塞进 ContextBuilder，
-而是先构造成独立 memory provider，再注入 ContextBuilder。
+到了第 19 步，memory 已从 placeholder 升级为最小真实文件实现：
+从 workspace/MEMORY.md 读取内容，再注入 ContextBuilder。
 
-这样启动装配层就更接近真实系统：
-- provider 负责模型调用
-- context builder 负责上下文装配
-- memory provider 负责 memory block 生成
+这样启动装配层现在包含：
+- provider：模型调用边界
+- memory provider：memory 来源边界
+- context builder：上下文装配边界
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from pathlib import Path
 import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
-from memory import PlaceholderMemoryProvider
+from memory import FileMemoryProvider
 from providers import make_provider
 from runtime import (
     AgentLoop,
@@ -57,7 +57,7 @@ def chat(
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
     workspace_context = load_workspace_context(config.agent.workspace)
-    memory_provider = PlaceholderMemoryProvider()
+    memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
@@ -110,8 +110,9 @@ def chat(
     print(f"workspace.identity.vibe = {parsed_identity.vibe}")
     print(f"workspace.identity.emoji = {parsed_identity.emoji}")
     print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
-    print("memory.provider = PlaceholderMemoryProvider")
-    print("memory.placeholder.enabled = True")
+    print("memory.provider = FileMemoryProvider")
+    print(f"memory.path = {memory_provider.memory_path}")
+    print(f"memory.exists = {memory_provider.memory_path.exists()}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")
