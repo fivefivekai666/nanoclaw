@@ -3,18 +3,20 @@ runtime/context.py
 
 这是最小 ContextBuilder。
 
-到了第 16 步，它除了接收 config 里的 identity / persona，
-还开始接收来自 workspace 文件的最小 persona context：
-- workspace/IDENTITY.md
-- workspace/SOUL.md
+到了第 17 步的这个前置动作，它除了接收：
+- system prompt
+- config identity / persona
+- workspace persona
+- session history
 
-注入策略：
-- config identity/persona 仍然保留，作为结构化默认身份层
-- workspace 文件若存在，则作为更接近真实 agent 自我描述的补充层注入
+还开始预留一个最小 memory placeholder。
 
-这意味着 provider 接收到的上下文，
-已经从“规则 + 身份 + 历史”继续升级为：
-“规则 + 结构化身份 + workspace persona + 历史”。
+注意：
+- 这一步还没有真实 memory store
+- 也没有记忆检索/压缩/筛选逻辑
+- 只是先在 prompt 骨架中留出 memory 段
+
+这样后面接真实 memory 时，就不需要再改上下文整体结构。
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ class ContextBuilder:
     - system_prompt
     - identity / persona（config）
     - workspace persona（IDENTITY.md / SOUL.md）
+    - memory placeholder
     - session.messages
 
     组合成 provider 可消费的一段 prompt 文本。
@@ -43,12 +46,14 @@ class ContextBuilder:
         identity_role: str,
         persona_style: str,
         workspace_context: WorkspaceContext | None = None,
+        memory_placeholder: str = "[memory placeholder: not implemented yet]",
     ) -> None:
         self.system_prompt = system_prompt
         self.identity_name = identity_name
         self.identity_role = identity_role
         self.persona_style = persona_style
         self.workspace_context = workspace_context or WorkspaceContext()
+        self.memory_placeholder = memory_placeholder
 
     def build(self, session: Session) -> str:
         """
@@ -67,6 +72,9 @@ class ContextBuilder:
             ...
 
             workspace.soul:
+            ...
+
+            memory:
             ...
 
             user: ...
@@ -95,6 +103,12 @@ class ContextBuilder:
                 self.workspace_context.soul_text,
                 "",
             ])
+
+        lines.extend([
+            "memory:",
+            self.memory_placeholder,
+            "",
+        ])
 
         lines.extend(f"{message.role}: {message.content}" for message in session.messages)
         return "\n".join(lines)

@@ -3,13 +3,12 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 16 步，chat 主流程在创建 ContextBuilder 前，
-会先从 workspace 目录读取最小 persona 文件：
-- IDENTITY.md
-- SOUL.md
+到了这个小步，我们先在 ContextBuilder 里接入一个 memory placeholder，
+目的是先把 prompt 骨架里的 memory 段固定下来。
 
-这意味着 runtime 上下文不再只来自 config，
-也开始从真实工作目录里的 agent 文件读取自我描述。
+注意：
+- 现在还没有真实 memory store
+- 这里只是给后续长期记忆层预留接口位置
 """
 
 from __future__ import annotations
@@ -62,6 +61,7 @@ def chat(
         identity_role=config.agent.identity_role,
         persona_style=config.agent.persona_style,
         workspace_context=workspace_context,
+        memory_placeholder="[memory placeholder: not implemented yet]",
     )
     loop = AgentLoop(provider=provider, context_builder=context_builder)
 
@@ -90,6 +90,7 @@ def chat(
     print(f"agent.persona_style = {config.agent.persona_style}")
     print(f"workspace.identity.loaded = {bool(workspace_context.identity_text)}")
     print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
+    print("memory.placeholder.enabled = True")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")
