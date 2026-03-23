@@ -3,15 +3,15 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 25 步，我们继续完善 loop 的可控性：
-把 response_style 从裸字符串升级成受限类型入口，
-减少 runtime 到处手写字符串判断。
+到了第 26 步，我们继续沿着 runtime 主线推进：
+把 AgentLoop 的输出从单一 assistant Message 升级成结构化 LoopResult。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
 - memory provider：memory 来源与最小清洗边界
-- response policy：回答规则边界（支持 normal / concise，并用 ResponseStyle 收紧入口）
+- response policy：回答规则边界
 - context builder：稳定的 section-based prompt 装配边界
+- loop result：一次运行的结构化结果边界
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from providers import make_provider
 from runtime import (
     AgentLoop,
     ContextBuilder,
+    LoopResult,
     Message,
     ResponsePolicy,
     ResponseStyle,
@@ -91,7 +92,7 @@ def chat(
     previous_message_count = len(session.messages)
     session.add_message(Message(role="user", content=message))
 
-    assistant_message = loop.run_once(session)
+    loop_result = loop.run_once(session)
     saved_path = save_session(session, session_dir)
     latest_message = session.latest_message()
 
@@ -139,13 +140,17 @@ def chat(
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")
     print(f"provider.model = {config.provider.model}")
+    print(f"loop.result.type = {LoopResult.__name__}")
+    print(f"loop.result.session_id = {loop_result.session_id}")
+    print(f"loop.result.prompt_length = {len(loop_result.prompt)}")
+    print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
     print(f"session.id = {session.id}")
     print(f"session.loaded_from_disk = {loaded_from_disk}")
     print(f"session.previous_message_count = {previous_message_count}")
     print(f"session.message_count = {len(session.messages)}")
     print(f"session.saved_path = {saved_path}")
-    print(f"assistant.message.role = {assistant_message.role}")
-    print(f"assistant.message.content = {assistant_message.content}")
+    print(f"assistant.message.role = {loop_result.assistant_message.role}")
+    print(f"assistant.message.content = {loop_result.assistant_message.content}")
     if latest_message is not None:
         print(f"session.latest.role = {latest_message.role}")
         print(f"session.latest.content = {latest_message.content}")
