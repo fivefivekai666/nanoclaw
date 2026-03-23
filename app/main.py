@@ -3,13 +3,12 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-这一版的重要变化是：
-- session id 不再写死在代码常量里
-- 默认值来自配置文件
-- CLI 可以用 --session-id 显式覆盖默认值
+到了第 12 步，CLI 不再只有 chat，
+还开始具备最小 session 管理命令：
+- sessions list
+- sessions inspect <session_id>
 
-这意味着同一个程序现在可以自然管理多个会话，
-而不是永远只绑死在 local-dev-session 上。
+这让 session 系统第一次变得“可观察”。
 """
 
 from __future__ import annotations
@@ -20,9 +19,11 @@ import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from providers import make_provider
-from runtime import AgentLoop, Message, Session, load_session, save_session
+from runtime import AgentLoop, Message, Session, list_sessions, load_session, save_session
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
+sessions_app = typer.Typer(help="Manage saved sessions.")
+app.add_typer(sessions_app, name="sessions")
 
 
 @app.callback()
@@ -41,17 +42,6 @@ def chat(
 ) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
-
-    当前行为：
-    1. 读取配置
-    2. 决定实际 session_id（CLI 覆盖 config 默认值）
-    3. 尝试加载该 session
-    4. 若不存在则创建新 session
-    5. 运行一轮 agent 并保存回磁盘
-
-    使用示例：
-        myagent chat "hello"
-        myagent chat "hello" --session-id demo-a
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
@@ -90,6 +80,44 @@ def chat(
     if latest_message is not None:
         print(f"session.latest.role = {latest_message.role}")
         print(f"session.latest.content = {latest_message.content}")
+
+
+@sessions_app.command("list")
+def sessions_list_command() -> None:
+    """列出当前所有已保存的 session。"""
+    config = load_config(DEFAULT_CONFIG_PATH)
+    session_dir = Path(config.agent.session_dir)
+    sessions = list_sessions(session_dir)
+
+    print(f"session.dir = {session_dir}")
+    print(f"session.count = {len(sessions)}")
+
+    for session in sessions:
+        latest_message = session.latest_message()
+        last_role = latest_message.role if latest_message is not None else "none"
+        last_preview = latest_message.content if latest_message is not None else ""
+        last_preview = last_preview.replace("\n", " ")[:80]
+        print(
+            f"- id={session.id} messages={len(session.messages)} "
+            f"last_role={last_role} last_preview={last_preview}"
+        )
+
+
+@sessions_app.command("inspect")
+def sessions_inspect_command(session_id: str) -> None:
+    """查看某个指定 session 的详细内容。"""
+    config = load_config(DEFAULT_CONFIG_PATH)
+    session_dir = Path(config.agent.session_dir)
+    session = load_session(session_id, session_dir)
+
+    if session is None:
+        print(f"session.not_found = {session_id}")
+        raise typer.Exit(code=1)
+
+    print(f"session.id = {session.id}")
+    print(f"session.message_count = {len(session.messages)}")
+    for index, message in enumerate(session.messages, start=1):
+        print(f"{index}. {message.role}: {message.content}")
 
 
 def main() -> None:

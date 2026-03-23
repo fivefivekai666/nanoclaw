@@ -1,21 +1,16 @@
 """
 runtime/session_store.py
 
-这是第 10 步新增的最小持久化层。
+这是最小会话持久化与管理层。
 
-为什么单独做一个 store 文件？
-因为 Session 是“数据结构”，而 session_store 是“存储方式”。
-这两个概念应该分开。
-
-第 10 步只实现最小功能：
+目前支持：
 - save_session(...)
 - load_session(...)
-- 默认把每个 session 存成一个 JSON 文件
+- list_sessions(...)
 
-存储路径形式：
-    <base_dir>/<session_id>.json
-
-这样做简单、可读、好调试，也方便后续升级成别的存储方案。
+第 12 步开始，这里除了保存/读取单个会话，
+还负责“列出当前有哪些会话文件”，
+从而给 CLI 提供最小 session 管理能力。
 """
 
 from __future__ import annotations
@@ -32,16 +27,7 @@ def _session_file_path(session_id: str, base_dir: Path) -> Path:
 
 
 def save_session(session: Session, base_dir: Path) -> Path:
-    """
-    把一个 Session 保存到磁盘。
-
-    参数：
-    - session: 要保存的会话对象
-    - base_dir: 会话目录，例如 workspace/sessions
-
-    返回：
-    - 实际写入的文件路径
-    """
+    """把一个 Session 保存到磁盘。"""
     base_dir.mkdir(parents=True, exist_ok=True)
     file_path = _session_file_path(session.id, base_dir)
     file_path.write_text(
@@ -52,15 +38,27 @@ def save_session(session: Session, base_dir: Path) -> Path:
 
 
 def load_session(session_id: str, base_dir: Path) -> Session | None:
-    """
-    从磁盘读取一个 Session。
-
-    如果文件不存在，则返回 None，
-    这样调用方可以决定是否创建一个新会话。
-    """
+    """从磁盘读取一个 Session；若不存在则返回 None。"""
     file_path = _session_file_path(session_id, base_dir)
     if not file_path.exists():
         return None
 
     raw_data = json.loads(file_path.read_text(encoding="utf-8"))
     return Session.model_validate(raw_data)
+
+
+def list_sessions(base_dir: Path) -> list[Session]:
+    """
+    列出某个目录下所有已保存的 session。
+
+    返回值按文件名排序，方便稳定输出和教学演示。
+    如果目录不存在，则返回空列表。
+    """
+    if not base_dir.exists():
+        return []
+
+    sessions: list[Session] = []
+    for file_path in sorted(base_dir.glob("*.json")):
+        raw_data = json.loads(file_path.read_text(encoding="utf-8"))
+        sessions.append(Session.model_validate(raw_data))
+    return sessions
