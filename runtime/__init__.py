@@ -1,7 +1,7 @@
 """
 runtime/__init__.py
 
-到了第 29 步，runtime 包继续暴露 context / session / workspace / policy / loop result 等能力。
+到了第 30 步，runtime 包继续暴露 context / session / workspace / policy / loop result 等能力。
 
 这样 runtime 里的职责拆分更清楚：
 - ContextBuilder：上下文装配
@@ -12,6 +12,7 @@ runtime/__init__.py
 - LoopStatus / LoopStopReason：一次 loop 执行的最小结束语义
 - LoopError：一次 loop 执行的最小失败信息边界
 - LoopErrorKind：一次 loop 执行失败时的受限分类边界
+- attempts：一次 loop 执行中的最小重试观测边界
 """
 
 from runtime.context import ContextBuilder

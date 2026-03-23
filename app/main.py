@@ -3,9 +3,9 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 29 步，我们继续沿着 runtime 主线推进：
-给 LoopResult 的 failure path 增加最小 error_kind / recoverable 边界，
-让 loop 不只知道“失败了”，还开始知道“这类失败未来是否值得 retry / fallback”。
+到了第 30 步，我们继续沿着 runtime 主线推进：
+给 AgentLoop 增加最小 retry policy 边界，
+让 loop 不只知道“这类失败未来是否可恢复”，还开始真的做一次最小恢复动作。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
@@ -16,6 +16,7 @@ app/main.py
 - loop status / stop reason：一次运行的最小结束语义
 - loop error：一次运行的最小失败信息边界
 - loop error kind：一次运行的最小受限失败分类边界
+- attempts：一次运行的最小重试观测边界
 """
 
 from __future__ import annotations
@@ -48,22 +49,28 @@ from runtime import (
 
 
 class FailingProvider(BaseProvider):
-    """仅用于本地验证 failure path 的最小 provider。"""
+    """仅用于本地验证 failure path / retry path 的最小 provider。"""
 
     def __init__(
         self,
         error_message: str = "simulated provider failure",
         error_type: str = "runtime",
+        fail_times: int = 1,
     ) -> None:
         self.error_message = error_message
         self.error_type = error_type
+        self.fail_times = fail_times
+        self.calls = 0
 
     def chat(self, prompt: str) -> str:
-        if self.error_type == "value":
-            raise ValueError(self.error_message)
-        if self.error_type == "internal":
-            raise KeyError(self.error_message)
-        raise RuntimeError(self.error_message)
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            if self.error_type == "value":
+                raise ValueError(self.error_message)
+            if self.error_type == "internal":
+                raise KeyError(self.error_message)
+            raise RuntimeError(self.error_message)
+        return f"[failing-provider-recovered] recovered on attempt {self.calls}: {prompt}"
 
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
@@ -90,11 +97,15 @@ def chat(
     ),
     simulate_provider_error: bool = typer.Option(
         default=False,
-        help="仅用于验证 failure path：模拟 provider 调用失败。",
+        help="仅用于验证 failure path / retry path：模拟 provider 调用失败。",
     ),
     simulate_error_type: str = typer.Option(
         default="runtime",
         help="仅用于验证 error_kind 分类：支持 runtime / value / internal。",
+    ),
+    simulate_fail_times: int = typer.Option(
+        default=1,
+        help="仅用于验证 retry path：前几次调用先失败。",
     ),
 ) -> None:
     """
@@ -103,7 +114,7 @@ def chat(
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
     if simulate_provider_error:
-        provider = FailingProvider(error_type=simulate_error_type)
+        provider = FailingProvider(error_type=simulate_error_type, fail_times=simulate_fail_times)
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
     requested_response_style = response_style or config.agent.response_style
@@ -163,6 +174,7 @@ def chat(
     print(f"agent.response_style.fallback_used = {response_policy.fallback_used}")
     print(f"provider.simulated_error = {simulate_provider_error}")
     print(f"provider.simulated_error_type = {simulate_error_type}")
+    print(f"provider.simulated_fail_times = {simulate_fail_times}")
     print("prompt.mode = sectioned")
     print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
     print("response.policy = ResponsePolicy")
@@ -190,6 +202,7 @@ def chat(
     print(f"loop.result.stop_reason_type = {LoopStopReason.__name__}")
     print(f"loop.result.error_type = {LoopError.__name__}")
     print(f"loop.result.error_kind_type = {LoopErrorKind.__name__}")
+    print(f"loop.result.attempts = {loop_result.attempts}")
     if loop_result.assistant_message is not None:
         print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
     else:

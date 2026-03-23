@@ -1,12 +1,13 @@
 """
 runtime/result.py
 
-这是第 29 步的 loop result 模块。
+这是第 30 步的 loop result 模块。
 
 目标：
 - 让 AgentLoop 的结果对象既能表示正常完成
 - 也能表示异常结束
 - 并且为异常结束补上最小受限分类与可恢复性语义
+- 再进一步补上最小 retry 观测边界
 - 为后续扩展 retry / fallback / guardrail / max_steps 预留更稳定的落点
 
 当前保留的最小字段：
@@ -16,6 +17,7 @@ runtime/result.py
 - status
 - stop_reason
 - error
+- attempts
 """
 
 from __future__ import annotations
@@ -67,3 +69,4 @@ class LoopResult:
     status: LoopStatus
     stop_reason: LoopStopReason
     error: LoopError | None
+    attempts: int
