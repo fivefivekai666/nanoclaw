@@ -3,12 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 13 步，chat 主流程开始把 config 里的 system_prompt
-显式传给 AgentLoop。
+到了第 14 步，chat 主流程不再直接把 system_prompt 传给 AgentLoop，
+而是先创建一个 ContextBuilder，再把它交给 AgentLoop。
 
-这意味着 runtime 构造模型输入时，
-已经不再只是纯粹拼接 session 历史，
-而是开始拥有一层系统级指令。
+这意味着主流程装配开始显式体现：
+- provider 是模型调用层
+- context_builder 是上下文构造层
+- AgentLoop 是运行流程层
 """
 
 from __future__ import annotations
@@ -19,7 +20,15 @@ import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from providers import make_provider
-from runtime import AgentLoop, Message, Session, list_sessions, load_session, save_session
+from runtime import (
+    AgentLoop,
+    ContextBuilder,
+    Message,
+    Session,
+    list_sessions,
+    load_session,
+    save_session,
+)
 
 app = typer.Typer(help="A tiny agent runtime CLI.")
 sessions_app = typer.Typer(help="Manage saved sessions.")
@@ -45,10 +54,8 @@ def chat(
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
-    loop = AgentLoop(
-        provider=provider,
-        system_prompt=config.agent.system_prompt,
-    )
+    context_builder = ContextBuilder(system_prompt=config.agent.system_prompt)
+    loop = AgentLoop(provider=provider, context_builder=context_builder)
 
     effective_session_id = session_id or config.agent.default_session_id
     session_dir = Path(config.agent.session_dir)

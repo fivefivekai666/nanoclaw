@@ -1,24 +1,22 @@
 """
 runtime/__init__.py
 
-到了第 12 步，runtime 包正式暴露：
-- Message：统一消息数据结构
-- Session：最小会话容器
-- AgentLoop：主流程控制器
-- save_session / load_session：最小会话持久化能力
-- list_sessions：最小会话管理能力
+到了第 14 步，runtime 包正式开始区分：
+- Loop：负责流程推进
+- ContextBuilder：负责上下文构造
 
-这意味着系统开始拥有：
-数据单位 → 数据容器 → 处理流程 → 持久化 → 最小管理面
-这样的 runtime 骨架。
+这意味着系统的最小骨架已经不再只是“能跑”，
+而是开始出现清晰的职责分层。
 """
 
+from runtime.context import ContextBuilder
 from runtime.loop import AgentLoop
 from runtime.messages import Message
 from runtime.session import Session
 from runtime.session_store import list_sessions, load_session, save_session
 
 __all__ = [
+    "ContextBuilder",
     "AgentLoop",
     "Message",
     "Session",
