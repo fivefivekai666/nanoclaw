@@ -3,14 +3,15 @@ config/schema.py
 
 这是项目的配置对象定义文件。
 
-到了第 23 步，agent 配置除了 identity / persona / session 等基础参数外，
-再加入一个最小 response policy 配置入口：
-- response_style
+到了第 31 步，agent 配置除了 identity / persona / session / response policy 等基础参数外，
+再加入一个最小 runtime retry policy 配置入口：
+- retry.max_attempts
+- retry.retry_on_recoverable_only
 
 这样做的意义是：
-- 让“怎么回答”第一次成为正式可配置能力
-- 让 runtime 不只是能跑，还开始具备可控输出风格
-- 为未来扩展更多 policy mode 做准备
+- 让“遇到失败后怎么执行恢复动作”第一次成为正式可配置能力
+- 让 runtime 不只是能跑、能回答、能表达错误，还开始具备可配置执行策略层
+- 为未来扩展 backoff / fallback / tool-specific policy 做准备
 """
 
 from pydantic import BaseModel, Field
@@ -27,6 +28,20 @@ class ProviderSettings(BaseModel):
     model: str = Field(
         default="mock-echo-v1",
         description="provider 默认模型标识。",
+    )
+
+
+class RetrySettings(BaseModel):
+    """最小 runtime retry policy 配置。"""
+
+    max_attempts: int = Field(
+        default=2,
+        description="一次 loop 最多允许尝试多少次 provider 调用。",
+    )
+
+    retry_on_recoverable_only: bool = Field(
+        default=True,
+        description="是否仅对 recoverable 错误允许重试。",
     )
 
 
@@ -76,6 +91,11 @@ class AgentSettings(BaseModel):
     session_dir: str = Field(
         default="workspace/sessions",
         description="会话文件默认目录。",
+    )
+
+    retry: RetrySettings = Field(
+        default_factory=RetrySettings,
+        description="最小 runtime retry policy 配置。",
     )
 
 

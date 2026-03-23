@@ -3,14 +3,14 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 30 步，我们继续沿着 runtime 主线推进：
-给 AgentLoop 增加最小 retry policy 边界，
-让 loop 不只知道“这类失败未来是否可恢复”，还开始真的做一次最小恢复动作。
+到了第 31 步，我们继续沿着 runtime 主线推进：
+把 retry 逻辑从 AgentLoop 里的写死判断，提炼成独立 runtime policy / config 边界。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
 - memory provider：memory 来源与最小清洗边界
 - response policy：回答规则边界
+- retry policy：执行策略中的最小重试判断边界
 - context builder：稳定的 section-based prompt 装配边界
 - loop result：一次运行的结构化结果边界
 - loop status / stop reason：一次运行的最小结束语义
@@ -40,6 +40,7 @@ from runtime import (
     Message,
     ResponsePolicy,
     ResponseStyle,
+    RetryPolicy,
     Session,
     list_sessions,
     load_session,
@@ -107,6 +108,14 @@ def chat(
         default=1,
         help="仅用于验证 retry path：前几次调用先失败。",
     ),
+    retry_max_attempts: int | None = typer.Option(
+        default=None,
+        help="临时覆盖 retry policy 的最大尝试次数。",
+    ),
+    retry_on_recoverable_only: str | None = typer.Option(
+        default=None,
+        help="临时覆盖 retry policy：传 true / false，决定是否仅对 recoverable 错误允许重试。",
+    ),
 ) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
@@ -120,6 +129,16 @@ def chat(
     requested_response_style = response_style or config.agent.response_style
     normalized_requested_style = ResponsePolicy.normalize_style(requested_response_style)
     response_policy = ResponsePolicy(style=requested_response_style)
+    retry_on_recoverable_only_effective = config.agent.retry.retry_on_recoverable_only
+    if retry_on_recoverable_only is not None:
+        retry_on_recoverable_only_effective = (
+            retry_on_recoverable_only.strip().lower() == "true"
+        )
+
+    retry_policy = RetryPolicy(
+        max_attempts=retry_max_attempts or config.agent.retry.max_attempts,
+        retry_on_recoverable_only=retry_on_recoverable_only_effective,
+    )
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
@@ -129,7 +148,11 @@ def chat(
         response_policy=response_policy,
         workspace_context=workspace_context,
     )
-    loop = AgentLoop(provider=provider, context_builder=context_builder)
+    loop = AgentLoop(
+        provider=provider,
+        context_builder=context_builder,
+        retry_policy=retry_policy,
+    )
 
     effective_session_id = session_id or config.agent.default_session_id
     session_dir = Path(config.agent.session_dir)
@@ -172,6 +195,11 @@ def chat(
     print(f"agent.response_style.effective = {response_policy.style.value}")
     print(f"agent.response_style.type = {ResponseStyle.__name__}")
     print(f"agent.response_style.fallback_used = {response_policy.fallback_used}")
+    print(f"agent.retry.max_attempts.config = {config.agent.retry.max_attempts}")
+    print(f"agent.retry.retry_on_recoverable_only.config = {config.agent.retry.retry_on_recoverable_only}")
+    print(f"agent.retry.max_attempts.effective = {retry_policy.max_attempts}")
+    print(f"agent.retry.retry_on_recoverable_only.effective = {retry_policy.retry_on_recoverable_only}")
+    print("agent.retry.policy = RetryPolicy")
     print(f"provider.simulated_error = {simulate_provider_error}")
     print(f"provider.simulated_error_type = {simulate_error_type}")
     print(f"provider.simulated_fail_times = {simulate_fail_times}")

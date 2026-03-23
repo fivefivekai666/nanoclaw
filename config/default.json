@@ -8,7 +8,11 @@
     "persona_style": "clear, calm, structured",
     "response_style": "normal",
     "default_session_id": "local-dev-session",
-    "session_dir": "workspace/sessions"
+    "session_dir": "workspace/sessions",
+    "retry": {
+      "max_attempts": 2,
+      "retry_on_recoverable_only": true
+    }
   },
   "provider": {
     "name": "mock",

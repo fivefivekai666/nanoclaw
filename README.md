@@ -1,45 +1,46 @@
-# myagent · Step 30
+# myagent · Step 31
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 30 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 31 步。
 
 ## 这一步在做什么
 
-第 30 步的目标是：
+第 31 步的目标是：
 
-- 给 `AgentLoop` 增加最小 retry policy 边界
-- 当错误 `recoverable=True` 时自动重试 1 次
-- 把本轮实际尝试次数记录到 `LoopResult`
+- 把 retry policy 从 `AgentLoop` 里的写死逻辑提炼成独立 runtime policy
+- 给 retry policy 增加 config 边界
+- 让 loop 不再自己决定“要不要重试”，而是委托给独立策略层
 
 ## 为什么这样做
 
-第 29 步已经让 loop 能表达：
+第 30 步已经让 loop 能根据 recoverable 语义自动重试一次。
 
-- `error.kind`
-- `error.recoverable`
+但那时 retry 规则仍然写死在 loop 里，
+这会带来两个问题：
 
-但那时 runtime 还只是“知道这类错误也许可恢复”，
-并没有真的采取恢复动作。
+1. loop 同时负责“流程推进”和“执行策略判断”，职责开始混杂
+2. 以后如果要扩展 max_attempts / fallback / backoff，就没有清晰落点
 
-所以第 30 步先做最小执行闭环：
-
-- recoverable 错误 -> 自动重试 1 次
-- fatal 错误 -> 不重试，直接失败
+所以第 31 步先把执行策略层正式拆出来。
 
 ## 当前新增结构
 
-- `LoopResult.attempts`
-  - 表示本轮实际调用 provider 的次数
+- `runtime/retry_policy.py`
+  - `RetryPolicy`
+    - `max_attempts`
+    - `retry_on_recoverable_only`
+    - `should_retry(error, attempts_so_far)`
 
-## 当前最小 retry 规则
+- `config.agent.retry`
+  - `max_attempts`
+  - `retry_on_recoverable_only`
 
-- 第一次失败后，如果 `error.recoverable = True`
-  - 自动再试 1 次
-- 如果第二次成功
-  - 返回 `completed`
-- 如果第二次仍失败
-  - 返回 `failed`
-- 如果第一次就是 `recoverable = False`
-  - 不重试，直接失败
+## 当前最小策略规则
+
+- `attempts_so_far >= max_attempts` -> 不再重试
+- 如果 `retry_on_recoverable_only = True`
+  - 只有 `error.recoverable = True` 时才允许重试
+- 如果 `retry_on_recoverable_only = False`
+  - 只要还没超过 `max_attempts` 就允许重试
 
 ## 行为约束
 
@@ -47,19 +48,20 @@
 - `assistant_message` 不为空
 - `error = None`
 - assistant reply 会写回 session
-- `attempts` 可能是 `1` 或 `2`
+- `attempts` 由 retry policy 决定
 
 ### 失败路径
 - `assistant_message = None`
 - `error.kind` 属于受限枚举
-- `error.recoverable` 明确表明未来是否适合 retry / fallback
-- fatal 错误不重试
+- 是否继续重试由 `RetryPolicy` 决定
 - 不伪造 assistant message
 - 不把失败当成 assistant reply 写回 session
 
 ## 修改模块
 
-- 修改：`runtime/result.py`
+- 新增：`runtime/retry_policy.py`
+- 修改：`config/schema.py`
+- 修改：`config/default.json`
 - 修改：`runtime/loop.py`
 - 修改：`runtime/__init__.py`
 - 修改：`app/main.py`
@@ -72,25 +74,25 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 source .venv/bin/activate
 pip install -e .
 
-# 成功路径：一次成功
-myagent chat "hello from step30-success" --session-id step30-success
+# 默认配置：最多 2 次，且仅对 recoverable 错误重试
+myagent chat "hello from step31-default" --session-id step31-default --simulate-provider-error --simulate-error-type runtime --simulate-fail-times 1
 
-# 可恢复路径：第一次失败，第二次成功
-myagent chat "hello from step30-retry-success" --session-id step30-retry-success --simulate-provider-error --simulate-error-type runtime --simulate-fail-times 1
+# 覆盖配置：最多 1 次，相当于关闭重试
+myagent chat "hello from step31-no-retry" --session-id step31-no-retry --simulate-provider-error --simulate-error-type runtime --simulate-fail-times 1 --retry-max-attempts 1
 
-# fatal 路径：不重试
-myagent chat "hello from step30-fatal" --session-id step30-fatal --simulate-provider-error --simulate-error-type value --simulate-fail-times 1
-
-# 可恢复但最终仍失败：两次都失败
-myagent chat "hello from step30-retry-fail" --session-id step30-retry-fail --simulate-provider-error --simulate-error-type runtime --simulate-fail-times 2
+# 覆盖配置：允许非 recoverable 错误也重试
+myagent chat "hello from step31-force-retry" --session-id step31-force-retry --simulate-provider-error --simulate-error-type value --simulate-fail-times 1 --retry-on-recoverable-only false
 ```
+
+> 注意：这里为了避免 Typer 的布尔参数形态歧义，`--retry-on-recoverable-only` 当前按字符串接收，显式传 `true` / `false`。
 
 ## 预期现象
 
 你会看到：
 
-- `loop.result.attempts = 1 | 2`
-- recoverable 错误时会自动重试一次
-- fatal 错误时不会重试
+- `agent.retry.max_attempts.config = ...`
+- `agent.retry.max_attempts.effective = ...`
+- `agent.retry.retry_on_recoverable_only.config = ...`
+- `agent.retry.retry_on_recoverable_only.effective = ...`
 
-这表示 loop 已开始从“表达错误语义”，推进到“根据错误语义执行最小恢复动作”。
+这表示 retry 已从 loop 内部硬编码，升级为独立 runtime policy / config 边界。
