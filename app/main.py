@@ -3,13 +3,13 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 15 步，chat 主流程在创建 ContextBuilder 时，
-除了 system_prompt 之外，也会把 identity / persona 一并传入。
+到了第 16 步，chat 主流程在创建 ContextBuilder 前，
+会先从 workspace 目录读取最小 persona 文件：
+- IDENTITY.md
+- SOUL.md
 
-这意味着 runtime 的上下文构造已经开始显式区分：
-- 规则层（system_prompt）
-- 角色层（identity / persona）
-- 对话层（session history）
+这意味着 runtime 上下文不再只来自 config，
+也开始从真实工作目录里的 agent 文件读取自我描述。
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from runtime import (
     Session,
     list_sessions,
     load_session,
+    load_workspace_context,
     save_session,
 )
 
@@ -54,11 +55,13 @@ def chat(
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
+    workspace_context = load_workspace_context(config.agent.workspace)
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
         identity_role=config.agent.identity_role,
         persona_style=config.agent.persona_style,
+        workspace_context=workspace_context,
     )
     loop = AgentLoop(provider=provider, context_builder=context_builder)
 
@@ -85,6 +88,8 @@ def chat(
     print(f"agent.identity_name = {config.agent.identity_name}")
     print(f"agent.identity_role = {config.agent.identity_role}")
     print(f"agent.persona_style = {config.agent.persona_style}")
+    print(f"workspace.identity.loaded = {bool(workspace_context.identity_text)}")
+    print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")
