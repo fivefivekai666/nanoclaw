@@ -1,40 +1,35 @@
-# myagent · Step 19
+# myagent · Step 20
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 19 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 20 步。
 
 ## 这一步在做什么
 
-第 19 步的目标是：
+第 20 步的目标是：
 
-- 把 memory 从 placeholder provider 升级为最小真实 provider
-- 实际读取 `workspace/MEMORY.md`
-- 把文件内容注入 `ContextBuilder`
-- 保持 memory 模块边界不变
-
-这一步的核心不是“智能记忆”，而是“真实 memory I/O 打通”。
+- 继续使用 `workspace/MEMORY.md` 作为真实 memory 来源
+- 但不再把原文整个直接塞进 prompt
+- 给 `FileMemoryProvider` 增加最小结构化处理
+- 只提取 `MEMORY.md` 的有效内容块
 
 ## 为什么这样做
 
-前一步已经把 memory 从 `ContextBuilder` 里拆成独立模块。
-那么这一步最自然的前进方式就是：
+第 19 步已经完成了真实 memory I/O 打通。
+接下来最自然的优化不是立刻做复杂记忆系统，
+而是先解决“原文直塞 prompt 太粗糙”这个问题。
 
-```text
-workspace/MEMORY.md -> FileMemoryProvider -> ContextBuilder
-```
+这一步只做低风险、高收益的清洗：
+- 去掉顶层标题（如 `# MEMORY.md`）
+- 去掉纯 HTML 注释行（如 `<!-- ... -->`）
+- 压缩连续空行为单个空行
 
-先让 memory 真正来自一个文件，再逐步做：
-- 解析
-- 裁剪
-- 摘要
-- 检索
-- 分层记忆
+这样可以先让 prompt 更干净，而不急着引入复杂策略。
 
 ## 当前结构
 
 ```text
 workspace/MEMORY.md
   ↓
-FileMemoryProvider
+FileMemoryProvider（最小结构化清洗）
   ↓
 ContextBuilder
   ↓
@@ -45,10 +40,9 @@ AgentLoop
 provider.chat(prompt)
 ```
 
-## 新增/调整模块
+## 修改模块
 
-- 新增：`memory/file.py`
-- 修改：`memory/__init__.py`
+- 修改：`memory/file.py`
 - 修改：`app/main.py`
 - 修改：`README.md`
 
@@ -60,23 +54,25 @@ mkdir -p workspace
 cat > workspace/MEMORY.md <<'EOF'
 # MEMORY.md
 
+<!-- internal comment -->
+
 - User prefers step-by-step explanations.
+-
 - Keep architecture modular.
 EOF
 
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step19" --session-id step19
+myagent chat "hello from step20" --session-id step20
 ```
 
 ## 预期现象
 
 - 输出里会显示：
   - `memory.provider = FileMemoryProvider`
-  - `memory.path = workspace/MEMORY.md`（或等价路径）
-  - `memory.exists = True`
-- mock provider 回显里会出现：
-  - `memory:`
-  - `# MEMORY.md`
-  - 文件中的实际内容
-- 不再只是 placeholder 文本
+  - `memory.mode = structured-file`
+- mock provider 回显中的 `memory:` 段：
+  - 不再包含 `# MEMORY.md`
+  - 不再包含纯 HTML 注释行
+  - 空行比之前更规整
+- 但 memory 的真实来源仍然是 `workspace/MEMORY.md`

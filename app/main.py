@@ -3,12 +3,12 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 19 步，memory 已从 placeholder 升级为最小真实文件实现：
-从 workspace/MEMORY.md 读取内容，再注入 ContextBuilder。
+到了第 20 步，memory 仍然来自 workspace/MEMORY.md，
+但 FileMemoryProvider 已不再原文直塞，而是先做最小结构化清洗。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
-- memory provider：memory 来源边界
+- memory provider：memory 来源与最小清洗边界
 - context builder：上下文装配边界
 """
 
@@ -111,6 +111,7 @@ def chat(
     print(f"workspace.identity.emoji = {parsed_identity.emoji}")
     print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
     print("memory.provider = FileMemoryProvider")
+    print("memory.mode = structured-file")
     print(f"memory.path = {memory_provider.memory_path}")
     print(f"memory.exists = {memory_provider.memory_path.exists()}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
