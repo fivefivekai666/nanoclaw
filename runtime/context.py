@@ -3,20 +3,16 @@ runtime/context.py
 
 这是最小 ContextBuilder。
 
-到了第 17 步的这个前置动作，它除了接收：
-- system prompt
-- config identity / persona
-- workspace persona
-- session history
+到了第 17 步，它不再把 workspace/IDENTITY.md 直接整段原文塞进 prompt，
+而是优先使用最小结构化解析结果。
 
-还开始预留一个最小 memory placeholder。
+当前策略：
+- config identity/persona：仍作为稳定的结构化默认层
+- workspace identity：优先注入结构化字段
+- workspace soul：暂时继续原文注入
+- memory：仍是 placeholder
 
-注意：
-- 这一步还没有真实 memory store
-- 也没有记忆检索/压缩/筛选逻辑
-- 只是先在 prompt 骨架中留出 memory 段
-
-这样后面接真实 memory 时，就不需要再改上下文整体结构。
+这样一来，workspace identity 开始从“原文块”升级为“可控字段块”。
 """
 
 from __future__ import annotations
@@ -32,7 +28,8 @@ class ContextBuilder:
     当前负责把：
     - system_prompt
     - identity / persona（config）
-    - workspace persona（IDENTITY.md / SOUL.md）
+    - workspace identity（结构化）
+    - workspace soul（原文）
     - memory placeholder
     - session.messages
 
@@ -58,27 +55,6 @@ class ContextBuilder:
     def build(self, session: Session) -> str:
         """
         根据 session 构造一段最小 prompt。
-
-        当前结构：
-
-            system: ...
-
-            identity:
-            - name: ...
-            - role: ...
-            - style: ...
-
-            workspace.identity:
-            ...
-
-            workspace.soul:
-            ...
-
-            memory:
-            ...
-
-            user: ...
-            assistant: ...
         """
         lines: list[str] = [
             f"system: {self.system_prompt}",
@@ -90,9 +66,36 @@ class ContextBuilder:
             "",
         ]
 
-        if self.workspace_context.identity_text:
+        workspace_identity = self.workspace_context.identity
+        has_structured_identity = any(
+            [
+                workspace_identity.name,
+                workspace_identity.creature,
+                workspace_identity.vibe,
+                workspace_identity.emoji,
+                workspace_identity.avatar,
+                workspace_identity.extras,
+            ]
+        )
+
+        if has_structured_identity:
+            lines.append("workspace.identity:")
+            if workspace_identity.name:
+                lines.append(f"- name: {workspace_identity.name}")
+            if workspace_identity.creature:
+                lines.append(f"- creature: {workspace_identity.creature}")
+            if workspace_identity.vibe:
+                lines.append(f"- vibe: {workspace_identity.vibe}")
+            if workspace_identity.emoji:
+                lines.append(f"- emoji: {workspace_identity.emoji}")
+            if workspace_identity.avatar:
+                lines.append(f"- avatar: {workspace_identity.avatar}")
+            for key, value in workspace_identity.extras.items():
+                lines.append(f"- {key}: {value}")
+            lines.append("")
+        elif self.workspace_context.identity_text:
             lines.extend([
-                "workspace.identity:",
+                "workspace.identity.raw:",
                 self.workspace_context.identity_text,
                 "",
             ])

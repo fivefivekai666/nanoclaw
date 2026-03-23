@@ -1,29 +1,34 @@
-# myagent · Step 16.5
+# myagent · Step 17
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的一个小前置步骤。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 17 步。
 
 ## 这一步在做什么
 
-这一步不是完整的 memory 系统，而只是先在 `ContextBuilder` 中加入一个最小 `memory` 占位段。
+第 17 步的目标是：
 
-目标是：
+- 对 `workspace/IDENTITY.md` 做最小结构化解析
+- 不再默认把它整段原文塞进 prompt
+- 优先提取出可控的身份字段，再注入 `ContextBuilder`
 
-- 先把 prompt 骨架里的 `memory:` 位置固定下来
-- 明确未来长期记忆应该挂载在这里
-- 后续实现真实 memory store 时，不需要再改 prompt 总结构
+当前解析策略非常克制：
 
-当前策略：
-
-- 不做真实 memory 读取
-- 不做压缩、筛选、检索
-- 只注入一段固定占位文本
+- 只解析最简单的 `- Key: Value`
+- 优先支持常见字段：
+  - `Name`
+  - `Creature`
+  - `Vibe`
+  - `Emoji`
+  - `Avatar`
+- 其他字段放进 `extras`
+- `SOUL.md` 仍然保持原文注入
+- 如果 `IDENTITY.md` 完全解析不出来，仍保留 raw fallback
 
 ## 当前结构
 
 ```text
-system
-identity
-workspace persona
+config.identity/persona
+workspace/IDENTITY.md -> structured identity
+workspace/SOUL.md -> raw text
 memory placeholder
 history
   ↓
@@ -34,23 +39,39 @@ prompt
 
 ## 你会学到什么
 
-1. 为什么很多系统会先留 memory slot，再逐步接真实实现
-2. 为什么 prompt 骨架先稳定下来很重要
-3. 为什么 placeholder 是合理的架构前置动作
+1. 为什么结构化 identity 比原文块更适合后续编程使用
+2. 为什么先做最小解析器比一步到位做完整 markdown parser 更稳
+3. 为什么 fallback 仍然重要
 
 ## 运行方式
 
 ```bash
 cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
+mkdir -p workspace
+cat > workspace/IDENTITY.md <<'EOF'
+# IDENTITY.md
+- Name: myagent-from-file
+- Creature: ghost in the machine
+- Vibe: warm and focused
+- Emoji: 🧠
+EOF
+
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello with memory placeholder" --session-id step16_5
+myagent chat "hello from step17" --session-id step17
 ```
 
 ## 预期现象
 
 - 输出里会显示：
-  - `memory.placeholder.enabled = True`
-- mock provider 回显里会包含：
-  - `memory:`
-  - `[memory placeholder: not implemented yet]`
+  - `workspace.identity.structured = True`
+  - `workspace.identity.name = myagent-from-file`
+  - `workspace.identity.creature = ghost in the machine`
+  - `workspace.identity.vibe = warm and focused`
+- mock provider 回显里会出现结构化的：
+  - `workspace.identity:`
+  - `- name: ...`
+  - `- creature: ...`
+  - `- vibe: ...`
+- 而不是直接整段原文块

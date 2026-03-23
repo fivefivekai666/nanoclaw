@@ -3,12 +3,11 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了这个小步，我们先在 ContextBuilder 里接入一个 memory placeholder，
-目的是先把 prompt 骨架里的 memory 段固定下来。
+到了第 17 步，workspace/IDENTITY.md 不再只作为原文块注入，
+而会先尝试做最小结构化解析。
 
-注意：
-- 现在还没有真实 memory store
-- 这里只是给后续长期记忆层预留接口位置
+这意味着启动时我们不但知道“文件有没有加载”，
+还可以知道“有没有成功提取出结构化身份字段”。
 """
 
 from __future__ import annotations
@@ -80,6 +79,18 @@ def chat(
     saved_path = save_session(session, session_dir)
     latest_message = session.latest_message()
 
+    parsed_identity = workspace_context.identity
+    structured_identity_loaded = any(
+        [
+            parsed_identity.name,
+            parsed_identity.creature,
+            parsed_identity.vibe,
+            parsed_identity.emoji,
+            parsed_identity.avatar,
+            parsed_identity.extras,
+        ]
+    )
+
     print("myagent booted")
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
     print(f"agent.name = {config.agent.name}")
@@ -89,6 +100,11 @@ def chat(
     print(f"agent.identity_role = {config.agent.identity_role}")
     print(f"agent.persona_style = {config.agent.persona_style}")
     print(f"workspace.identity.loaded = {bool(workspace_context.identity_text)}")
+    print(f"workspace.identity.structured = {structured_identity_loaded}")
+    print(f"workspace.identity.name = {parsed_identity.name}")
+    print(f"workspace.identity.creature = {parsed_identity.creature}")
+    print(f"workspace.identity.vibe = {parsed_identity.vibe}")
+    print(f"workspace.identity.emoji = {parsed_identity.emoji}")
     print(f"workspace.soul.loaded = {bool(workspace_context.soul_text)}")
     print("memory.placeholder.enabled = True")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
