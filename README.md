@@ -1,24 +1,21 @@
-# myagent · Step 4
+# myagent · Step 5
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 4 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 5 步。
 
 ## 这一步在做什么
 
-第 4 步开始给项目加入一个新的关键层：
+第 5 步开始引入一个真正像“agent runtime 核心”的对象：
 
-- `provider`
+- `AgentLoop`
 
-Provider 的职责是：
+它的职责是：
 
-- 让上层 runtime 用统一方式调用模型
-- 把具体模型厂商差异隔离在底层
+- 接收输入
+- 调用 provider
+- 返回输出
 
-为了先学清楚结构，这一步我们不接真实 API，
-而是先实现：
-
-- `BaseProvider`：统一接口
-- `MockProvider`：假的 provider 实现
-- `make_provider(config)`：根据配置选择 provider
+注意，这里的 `AgentLoop` 还是最小版本，
+目前只负责“单轮执行”，还没有 tools / memory / session / subagents。
 
 ## 当前启动流程
 
@@ -31,17 +28,19 @@ Config
   ↓
 make_provider(config)
   ↓
-MockProvider
+AgentLoop(provider)
   ↓
-provider.chat("hello from step4")
+loop.run_once("hello from step5")
+  ↓
+provider.chat(...)
 ```
 
 ## 你会学到什么
 
-1. 为什么 agent runtime 需要 provider 抽象层
-2. BaseProvider 和具体 provider 的分工
-3. 为什么先用 MockProvider 跑通链路
-4. 如何根据配置初始化 provider
+1. 为什么 agent 需要一个主流程控制器
+2. AgentLoop 和 Provider 的职责分工
+3. 为什么 main.py 不应该继续直接承担业务逻辑
+4. 如何先跑通最小单轮执行链路
 
 ## 运行方式
 
@@ -62,6 +61,6 @@ agent.name = myagent
 agent.workspace = ./workspace
 provider.name = mock
 provider.model = mock-echo-v1
-test_prompt = hello from step4
-provider.response = [mock-provider:mock-echo-v1] you said: hello from step4
+test_input = hello from step5
+loop.response = [mock-provider:mock-echo-v1] you said: hello from step5
 ```
