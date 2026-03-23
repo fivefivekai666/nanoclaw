@@ -3,12 +3,12 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 12 步，CLI 不再只有 chat，
-还开始具备最小 session 管理命令：
-- sessions list
-- sessions inspect <session_id>
+到了第 13 步，chat 主流程开始把 config 里的 system_prompt
+显式传给 AgentLoop。
 
-这让 session 系统第一次变得“可观察”。
+这意味着 runtime 构造模型输入时，
+已经不再只是纯粹拼接 session 历史，
+而是开始拥有一层系统级指令。
 """
 
 from __future__ import annotations
@@ -45,7 +45,10 @@ def chat(
     """
     config = load_config(DEFAULT_CONFIG_PATH)
     provider = make_provider(config)
-    loop = AgentLoop(provider=provider)
+    loop = AgentLoop(
+        provider=provider,
+        system_prompt=config.agent.system_prompt,
+    )
 
     effective_session_id = session_id or config.agent.default_session_id
     session_dir = Path(config.agent.session_dir)
@@ -66,6 +69,7 @@ def chat(
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
     print(f"agent.name = {config.agent.name}")
     print(f"agent.workspace = {config.agent.workspace}")
+    print(f"agent.system_prompt = {config.agent.system_prompt}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
     print(f"provider.name = {config.provider.name}")

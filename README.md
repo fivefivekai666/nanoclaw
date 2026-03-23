@@ -1,41 +1,40 @@
-# myagent · Step 12
+# myagent · Step 13
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 12 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 13 步。
 
 ## 这一步在做什么
 
-第 12 步的目标是：
+第 13 步的目标是：
 
-- 给系统补上最小 session 管理能力
-- 让 session 不只是能保存和读取
-- 还可以被列出、被查看
+- 把 `system_prompt` 正式接入 runtime
+- 让 provider 的输入不再只是历史消息拼接
+- 让 prompt 构造第一次拥有“系统级指令层”
 
-当前新增两个命令：
-
-```bash
-myagent sessions list
-myagent sessions inspect <session_id>
-```
+重要边界：
+- `session.messages` 仍然表示真实对话历史
+- `system_prompt` 不写入 session 文件
+- `system_prompt` 只在构造 prompt 时注入
 
 ## 当前结构
 
 ```text
-chat
-  └─ 处理一轮对话并保存 session
-
-sessions list
-  └─ 列出当前所有已保存的 session
-
-sessions inspect <id>
-  └─ 查看某个 session 的详细消息内容
+config.agent.system_prompt
+  ↓
+AgentLoop(system_prompt=...)
+  ↓
+_build_prompt_from_history(...)
+  ↓
+system: ...
+user: ...
+assistant: ...
 ```
 
 ## 你会学到什么
 
-1. 为什么 session 系统需要最小管理面
-2. 为什么“能保存”之后，下一个自然需求就是“能查看”
-3. 如何用 CLI 给 runtime 增加最小 control surface
-4. 为什么这一步适合先做 list / inspect，而不是 delete / rename
+1. 为什么 user history 和 system instruction 不是一回事
+2. 为什么 system prompt 最好作为 runtime 注入层存在
+3. 为什么这一步是 ContextBuilder 的前身
+4. 为什么先不要把 system prompt 直接写进 session
 
 ## 运行方式
 
@@ -44,14 +43,13 @@ cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello alpha" --session-id alpha
-myagent chat "hello beta" --session-id beta
-myagent sessions list
-myagent sessions inspect alpha
+myagent chat "hello from step13" --session-id step13
 ```
 
 ## 预期现象
 
-- `sessions list` 会列出所有 `workspace/sessions/*.json`
-- `sessions inspect alpha` 会输出 alpha 的完整消息列表
-- 这意味着 session 系统第一次变得可观察、可检查
+- 输出里会显示 `agent.system_prompt`
+- mock provider 的回显内容里会包含：
+  - `system: You are a helpful assistant.`
+  - `user: hello from step13`
+- 这说明 system prompt 已真实进入 provider 输入链路
