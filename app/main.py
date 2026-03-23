@@ -3,14 +3,14 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 22 步，我们继续完善 loop 的可维护性：
-把 [INSTRUCTION] section 从 ContextBuilder 中拆出，
-升级成独立的 runtime response policy 层。
+到了第 23 步，我们继续完善 loop 的可控性：
+给 ResponsePolicy 加入最小可配置项，让 [INSTRUCTION] 不只是独立，
+还能够根据 policy mode 产生不同的响应风格要求。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
 - memory provider：memory 来源与最小清洗边界
-- response policy：回答规则边界
+- response policy：回答规则边界（支持 normal / concise）
 - context builder：稳定的 section-based prompt 装配边界
 """
 
@@ -53,6 +53,10 @@ def chat(
         default=None,
         help="要使用的 session id；若不传，则使用配置文件中的默认值。",
     ),
+    response_style: str | None = typer.Option(
+        default=None,
+        help="临时覆盖 response policy 风格；支持 normal / concise。",
+    ),
 ) -> None:
     """
     从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
@@ -61,7 +65,8 @@ def chat(
     provider = make_provider(config)
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
-    response_policy = ResponsePolicy()
+    effective_response_style = response_style or config.agent.response_style
+    response_policy = ResponsePolicy(style=effective_response_style)
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
         identity_name=config.agent.identity_name,
@@ -108,6 +113,8 @@ def chat(
     print(f"agent.identity_name = {config.agent.identity_name}")
     print(f"agent.identity_role = {config.agent.identity_role}")
     print(f"agent.persona_style = {config.agent.persona_style}")
+    print(f"agent.response_style.default = {config.agent.response_style}")
+    print(f"agent.response_style.effective = {effective_response_style}")
     print("prompt.mode = sectioned")
     print("prompt.sections = SYSTEM, IDENTITY, WORKSPACE, MEMORY, CONVERSATION, INSTRUCTION")
     print("response.policy = ResponsePolicy")

@@ -3,16 +3,14 @@ config/schema.py
 
 这是项目的配置对象定义文件。
 
-到了第 15 步，agent 配置不再只包含“运行规则”和“会话参数”，
-还开始正式包含一层最小 identity / persona 信息：
-- identity_name
-- identity_role
-- persona_style
+到了第 23 步，agent 配置除了 identity / persona / session 等基础参数外，
+再加入一个最小 response policy 配置入口：
+- response_style
 
 这样做的意义是：
-- 让 agent 不只是“会运行的程序”
-- 也开始拥有“它是谁、以什么风格说话”的正式配置入口
-- 并且这些信息可以通过 ContextBuilder 注入到模型输入中
+- 让“怎么回答”第一次成为正式可配置能力
+- 让 runtime 不只是能跑，还开始具备可控输出风格
+- 为未来扩展更多 policy mode 做准备
 """
 
 from pydantic import BaseModel, Field
@@ -63,6 +61,11 @@ class AgentSettings(BaseModel):
     persona_style: str = Field(
         default="clear, calm, structured",
         description="agent 的表达风格描述。",
+    )
+
+    response_style: str = Field(
+        default="normal",
+        description="response policy 风格。当前支持：normal / concise。",
     )
 
     default_session_id: str = Field(

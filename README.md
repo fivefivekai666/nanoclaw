@@ -1,61 +1,58 @@
-# myagent · Step 22
+# myagent · Step 23
 
-这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 22 步。
+这是从 0 开始复刻 `nanobot + DeerFlow` 混血版 agent runtime 的第 23 步。
 
 ## 这一步在做什么
 
-第 22 步的目标是：
+第 23 步的目标是：
 
-- 不再让 `ContextBuilder` 自己硬编码 `[INSTRUCTION]`
-- 把响应规则升级成独立的 runtime response policy 层
-- 让“上下文内容”和“回答规则”职责分离
+- 给 `ResponsePolicy` 增加最小可配置项
+- 当前先支持两档：`normal` / `concise`
+- 让 loop 开始具备可控输出风格，而不只是“能跑”
 
 ## 为什么这样做
 
-第 21 步已经把 prompt 做成固定 section 模板。
-但其中 `[INSTRUCTION]` 仍然是写死在 `ContextBuilder` 里的。
+第 22 步已经把 `[INSTRUCTION]` 从 `ContextBuilder` 里拆成独立的 policy 层。
+接下来最自然的一步，不是马上上复杂 policy 系统，
+而是先让这个 policy 层具备最小“可配置性”。
 
-这意味着一个模块同时负责：
-- 上下文装配
-- 回答规则装配
-
-这两个职责虽然相关，但不应该绑死在一起。
-
-所以第 22 步继续拆分边界：
+这样可以先建立一个非常重要的能力：
 
 ```text
-ContextBuilder -> 负责上下文内容
-ResponsePolicy -> 负责回答规则
+同一个 runtime 主链
++ 不同 response policy mode
+= 不同回答风格
 ```
 
-## 当前结构
+## 当前支持的 policy mode
 
-```text
-provider
-memory provider
-response policy
-context builder
-agent loop
+- `normal`
+  - 正常解释
+  - 清晰、结构化、适度展开
+- `concise`
+  - 简短、直接、高信号
+  - 除非用户要求，否则不做多余展开
+
+## 配置与覆盖方式
+
+### 配置文件默认值
+`config/default.json`:
+
+```json
+"response_style": "normal"
 ```
 
-以及 prompt 仍保持：
+### CLI 临时覆盖
 
-```text
-[SYSTEM]
-[IDENTITY]
-[WORKSPACE]
-[MEMORY]
-[CONVERSATION]
-[INSTRUCTION]
+```bash
+myagent chat "hello" --response-style concise
 ```
-
-只是 `[INSTRUCTION]` 现在来自 `ResponsePolicy`。
 
 ## 修改模块
 
-- 新增：`runtime/policy.py`
-- 修改：`runtime/context.py`
-- 修改：`runtime/__init__.py`
+- 修改：`config/schema.py`
+- 修改：`config/default.json`
+- 修改：`runtime/policy.py`
 - 修改：`app/main.py`
 - 修改：`README.md`
 
@@ -65,12 +62,18 @@ agent loop
 cd /Users/dale/.openclaw/workspace-taizi/deliverables/myagent_step1
 source .venv/bin/activate
 pip install -e .
-myagent chat "hello from step22" --session-id step22
+
+# 默认 normal
+myagent chat "hello from step23 normal" --session-id step23-normal
+
+# 临时覆盖 concise
+myagent chat "hello from step23 concise" --session-id step23-concise --response-style concise
 ```
 
 ## 预期现象
 
 - 输出里会显示：
-  - `response.policy = ResponsePolicy`
-- mock provider 回显里仍然有 `[INSTRUCTION]`
+  - `agent.response_style.default = normal`
+  - `agent.response_style.effective = ...`
+- mock provider 回显里的 `[INSTRUCTION]` 会根据 mode 出现不同风格要求
 - loop 继续稳定可跑

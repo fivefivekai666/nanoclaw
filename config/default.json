@@ -6,6 +6,7 @@
     "identity_name": "myagent",
     "identity_role": "teaching-oriented agent runtime",
     "persona_style": "clear, calm, structured",
+    "response_style": "normal",
     "default_session_id": "local-dev-session",
     "session_dir": "workspace/sessions"
   },
