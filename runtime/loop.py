@@ -1,25 +1,26 @@
 """
 runtime/loop.py
 
-到了第 31 步，AgentLoop 继续保持“运行流程推进者”的角色，
-并把结果边界从“有最小 retry 行为”推进到“retry 行为由独立 policy 决定”。
+到了第 32 步，AgentLoop 继续保持“运行流程推进者”的角色，
+并把 provider fallback 从 loop 写死逻辑推进到独立 execution policy 边界。
 
 这意味着 loop 不只知道：
+- 有 retry policy
 - 有 recoverable / fatal 的区分
-- 有最小重试能力
 
 还开始知道：
-- 是否重试不应写死在 loop 主流程里
-- retry 判断应该由独立 runtime policy 层负责
+- 是否切到 fallback provider 不应写死在 loop 主流程里
+- fallback 判断应该由独立 execution policy 层负责
 
-第 31 步的重点不是扩展更复杂的重试机制，
-而是先把“执行策略层”从 loop 中拆出来。
+第 32 步的重点不是扩展复杂 provider 路由系统，
+而是先把最小 provider fallback 策略层正式拆出来。
 """
 
 from __future__ import annotations
 
 from providers.base import BaseProvider
 from runtime.context import ContextBuilder
+from runtime.execution_policy import ExecutionPolicy
 from runtime.messages import Message
 from runtime.result import (
     LoopError,
@@ -33,71 +34,52 @@ from runtime.session import Session
 
 
 class AgentLoop:
-    """
-    AgentLoop 是 agent 运行时的最小主流程骨架。
-
-    到了第 31 步，它的职责更聚焦于：
-    1. 接收一个 Session
-    2. 调用 ContextBuilder 构造 prompt
-    3. 调用 provider
-    4. 成功时把 assistant 回复追加回 session
-    5. 失败时返回结构化失败结果，而不是伪造 assistant message
-    6. 给失败结果补上最小 error_kind / recoverable 语义
-    7. 把是否重试的判断委托给独立 RetryPolicy
-
-    这样一来，loop 的输出开始同时具备：
-    - success / failure 两条最小语义边界
-    - 最小 retry 行为边界
-    - 最小可配置执行策略边界
-    """
-
     def __init__(
         self,
         provider: BaseProvider,
         context_builder: ContextBuilder,
         retry_policy: RetryPolicy,
+        execution_policy: ExecutionPolicy,
     ) -> None:
         self.provider = provider
         self.context_builder = context_builder
         self.retry_policy = retry_policy
+        self.execution_policy = execution_policy
 
     def _classify_error(self, exc: Exception) -> LoopError:
-        """把 Python 异常压成当前 runtime 需要的最小错误语义。"""
         if isinstance(exc, ValueError):
             return LoopError(
                 kind=LoopErrorKind.CONFIG_ERROR,
                 message=str(exc),
                 recoverable=False,
             )
-
         if isinstance(exc, RuntimeError):
             return LoopError(
                 kind=LoopErrorKind.PROVIDER_ERROR,
                 message=str(exc),
                 recoverable=True,
             )
-
         return LoopError(
             kind=LoopErrorKind.INTERNAL_ERROR,
             message=str(exc),
             recoverable=False,
         )
 
-    def _attempt_once(self, prompt: str) -> Message:
-        """执行一次 provider 调用并返回 assistant message。"""
-        response_text = self.provider.chat(prompt)
+    def _attempt_once(self, provider: BaseProvider, prompt: str) -> Message:
+        response_text = provider.chat(prompt)
         return Message(role="assistant", content=response_text)
 
     def run_once(self, session: Session) -> LoopResult:
-        """执行一轮最小 agent 流程，并把 retry 判断委托给 RetryPolicy。"""
         prompt = self.context_builder.build(session)
         attempts = 0
-        last_error: LoopError | None = None
+        fallback_used = False
+        current_provider = self.execution_policy.current_provider(fallback_used=False)
+        provider_used = type(current_provider).__name__
 
         while True:
             try:
                 attempts += 1
-                assistant_message = self._attempt_once(prompt)
+                assistant_message = self._attempt_once(current_provider, prompt)
                 session.add_message(assistant_message)
                 return LoopResult(
                     session_id=session.id,
@@ -107,16 +89,29 @@ class AgentLoop:
                     stop_reason=LoopStopReason.ASSISTANT_RESPONSE,
                     error=None,
                     attempts=attempts,
+                    provider_used=provider_used,
+                    fallback_used=fallback_used,
                 )
             except Exception as exc:
-                last_error = self._classify_error(exc)
-                if not self.retry_policy.should_retry(last_error, attempts):
-                    return LoopResult(
-                        session_id=session.id,
-                        prompt=prompt,
-                        assistant_message=None,
-                        status=LoopStatus.FAILED,
-                        stop_reason=LoopStopReason.PROVIDER_ERROR,
-                        error=last_error,
-                        attempts=attempts,
-                    )
+                classified_error = self._classify_error(exc)
+
+                if self.retry_policy.should_retry(classified_error, attempts):
+                    continue
+
+                if self.execution_policy.should_fallback(classified_error, fallback_used):
+                    fallback_used = True
+                    current_provider = self.execution_policy.current_provider(fallback_used=True)
+                    provider_used = type(current_provider).__name__
+                    continue
+
+                return LoopResult(
+                    session_id=session.id,
+                    prompt=prompt,
+                    assistant_message=None,
+                    status=LoopStatus.FAILED,
+                    stop_reason=LoopStopReason.PROVIDER_ERROR,
+                    error=classified_error,
+                    attempts=attempts,
+                    provider_used=provider_used,
+                    fallback_used=fallback_used,
+                )

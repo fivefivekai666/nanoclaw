@@ -3,20 +3,8 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 31 步，我们继续沿着 runtime 主线推进：
-把 retry 逻辑从 AgentLoop 里的写死判断，提炼成独立 runtime policy / config 边界。
-
-这样启动装配层现在包含：
-- provider：模型调用边界
-- memory provider：memory 来源与最小清洗边界
-- response policy：回答规则边界
-- retry policy：执行策略中的最小重试判断边界
-- context builder：稳定的 section-based prompt 装配边界
-- loop result：一次运行的结构化结果边界
-- loop status / stop reason：一次运行的最小结束语义
-- loop error：一次运行的最小失败信息边界
-- loop error kind：一次运行的最小受限失败分类边界
-- attempts：一次运行的最小重试观测边界
+到了第 32 步，我们继续沿着 runtime 主线推进：
+把 provider fallback 从 loop 写死逻辑，提炼成独立 execution policy / config 边界。
 """
 
 from __future__ import annotations
@@ -27,11 +15,12 @@ import typer
 
 from config.loader import DEFAULT_CONFIG_PATH, load_config
 from memory import FileMemoryProvider
-from providers import make_provider
+from providers import make_provider, make_provider_from_name_model
 from providers.base import BaseProvider
 from runtime import (
     AgentLoop,
     ContextBuilder,
+    ExecutionPolicy,
     LoopError,
     LoopErrorKind,
     LoopResult,
@@ -50,14 +39,9 @@ from runtime import (
 
 
 class FailingProvider(BaseProvider):
-    """仅用于本地验证 failure path / retry path 的最小 provider。"""
+    """仅用于本地验证 failure / retry / fallback path 的最小 provider。"""
 
-    def __init__(
-        self,
-        error_message: str = "simulated provider failure",
-        error_type: str = "runtime",
-        fail_times: int = 1,
-    ) -> None:
+    def __init__(self, error_message: str = "simulated provider failure", error_type: str = "runtime", fail_times: int = 1) -> None:
         self.error_message = error_message
         self.error_type = error_type
         self.fail_times = fail_times
@@ -81,63 +65,61 @@ app.add_typer(sessions_app, name="sessions")
 
 @app.callback()
 def main_callback() -> None:
-    """顶层 CLI 回调，用来稳定保留子命令结构。"""
     return None
 
 
 @app.command()
 def chat(
     message: str,
-    session_id: str | None = typer.Option(
-        default=None,
-        help="要使用的 session id；若不传，则使用配置文件中的默认值。",
-    ),
-    response_style: str | None = typer.Option(
-        default=None,
-        help="临时覆盖 response policy 风格；支持 normal / concise。未知值会 fallback 到 normal。",
-    ),
-    simulate_provider_error: bool = typer.Option(
-        default=False,
-        help="仅用于验证 failure path / retry path：模拟 provider 调用失败。",
-    ),
-    simulate_error_type: str = typer.Option(
-        default="runtime",
-        help="仅用于验证 error_kind 分类：支持 runtime / value / internal。",
-    ),
-    simulate_fail_times: int = typer.Option(
-        default=1,
-        help="仅用于验证 retry path：前几次调用先失败。",
-    ),
-    retry_max_attempts: int | None = typer.Option(
-        default=None,
-        help="临时覆盖 retry policy 的最大尝试次数。",
-    ),
-    retry_on_recoverable_only: str | None = typer.Option(
-        default=None,
-        help="临时覆盖 retry policy：传 true / false，决定是否仅对 recoverable 错误允许重试。",
-    ),
+    session_id: str | None = typer.Option(default=None, help="要使用的 session id；若不传，则使用配置文件中的默认值。"),
+    response_style: str | None = typer.Option(default=None, help="临时覆盖 response policy 风格；支持 normal / concise。未知值会 fallback 到 normal。"),
+    simulate_provider_error: bool = typer.Option(default=False, help="仅用于验证 failure / retry / fallback path：模拟主 provider 调用失败。"),
+    simulate_error_type: str = typer.Option(default="runtime", help="仅用于验证 error_kind 分类：支持 runtime / value / internal。"),
+    simulate_fail_times: int = typer.Option(default=1, help="仅用于验证 retry / fallback path：前几次调用先失败。"),
+    retry_max_attempts: int | None = typer.Option(default=None, help="临时覆盖 retry policy 的最大尝试次数。"),
+    retry_on_recoverable_only: str | None = typer.Option(default=None, help="临时覆盖 retry policy：传 true / false，决定是否仅对 recoverable 错误允许重试。"),
+    fallback_enabled: str | None = typer.Option(default=None, help="临时覆盖 execution policy：传 true / false，决定是否启用 fallback provider。"),
+    fallback_on_recoverable_only: str | None = typer.Option(default=None, help="临时覆盖 execution policy：传 true / false，决定是否仅在 recoverable 错误时才切到 fallback provider。"),
 ) -> None:
-    """
-    从 CLI 接收一段用户输入，并执行一轮最小 agent 处理。
-    """
     config = load_config(DEFAULT_CONFIG_PATH)
-    provider = make_provider(config)
+
+    primary_provider = make_provider(config)
     if simulate_provider_error:
-        provider = FailingProvider(error_type=simulate_error_type, fail_times=simulate_fail_times)
+        primary_provider = FailingProvider(error_type=simulate_error_type, fail_times=simulate_fail_times)
+
+    fallback_enabled_effective = config.provider.fallback.enabled
+    if fallback_enabled is not None:
+        fallback_enabled_effective = fallback_enabled.strip().lower() == "true"
+
+    fallback_provider = None
+    if fallback_enabled_effective:
+        fallback_provider = make_provider_from_name_model(
+            config.provider.fallback.name,
+            config.provider.fallback.model,
+        )
+
+    fallback_on_recoverable_only_effective = config.provider.fallback.on_recoverable_only
+    if fallback_on_recoverable_only is not None:
+        fallback_on_recoverable_only_effective = fallback_on_recoverable_only.strip().lower() == "true"
+
     workspace_context = load_workspace_context(config.agent.workspace)
     memory_provider = FileMemoryProvider(workspace_dir=config.agent.workspace)
     requested_response_style = response_style or config.agent.response_style
     normalized_requested_style = ResponsePolicy.normalize_style(requested_response_style)
     response_policy = ResponsePolicy(style=requested_response_style)
+
     retry_on_recoverable_only_effective = config.agent.retry.retry_on_recoverable_only
     if retry_on_recoverable_only is not None:
-        retry_on_recoverable_only_effective = (
-            retry_on_recoverable_only.strip().lower() == "true"
-        )
+        retry_on_recoverable_only_effective = retry_on_recoverable_only.strip().lower() == "true"
 
     retry_policy = RetryPolicy(
         max_attempts=retry_max_attempts or config.agent.retry.max_attempts,
         retry_on_recoverable_only=retry_on_recoverable_only_effective,
+    )
+    execution_policy = ExecutionPolicy(
+        primary_provider=primary_provider,
+        fallback_provider=fallback_provider,
+        fallback_on_recoverable_only=fallback_on_recoverable_only_effective,
     )
     context_builder = ContextBuilder(
         system_prompt=config.agent.system_prompt,
@@ -149,14 +131,14 @@ def chat(
         workspace_context=workspace_context,
     )
     loop = AgentLoop(
-        provider=provider,
+        provider=primary_provider,
         context_builder=context_builder,
         retry_policy=retry_policy,
+        execution_policy=execution_policy,
     )
 
     effective_session_id = session_id or config.agent.default_session_id
     session_dir = Path(config.agent.session_dir)
-
     session = load_session(effective_session_id, session_dir)
     loaded_from_disk = session is not None
     if session is None:
@@ -164,22 +146,19 @@ def chat(
 
     previous_message_count = len(session.messages)
     session.add_message(Message(role="user", content=message))
-
     loop_result = loop.run_once(session)
     saved_path = save_session(session, session_dir)
     latest_message = session.latest_message()
 
     parsed_identity = workspace_context.identity
-    structured_identity_loaded = any(
-        [
-            parsed_identity.name,
-            parsed_identity.creature,
-            parsed_identity.vibe,
-            parsed_identity.emoji,
-            parsed_identity.avatar,
-            parsed_identity.extras,
-        ]
-    )
+    structured_identity_loaded = any([
+        parsed_identity.name,
+        parsed_identity.creature,
+        parsed_identity.vibe,
+        parsed_identity.emoji,
+        parsed_identity.avatar,
+        parsed_identity.extras,
+    ])
 
     print("myagent booted")
     print(f"loaded config from = {DEFAULT_CONFIG_PATH}")
@@ -200,6 +179,15 @@ def chat(
     print(f"agent.retry.max_attempts.effective = {retry_policy.max_attempts}")
     print(f"agent.retry.retry_on_recoverable_only.effective = {retry_policy.retry_on_recoverable_only}")
     print("agent.retry.policy = RetryPolicy")
+    print(f"provider.primary.name = {config.provider.name}")
+    print(f"provider.primary.model = {config.provider.model}")
+    print(f"provider.fallback.enabled.config = {config.provider.fallback.enabled}")
+    print(f"provider.fallback.enabled.effective = {fallback_enabled_effective}")
+    print(f"provider.fallback.name = {config.provider.fallback.name}")
+    print(f"provider.fallback.model = {config.provider.fallback.model}")
+    print(f"provider.fallback.on_recoverable_only.config = {config.provider.fallback.on_recoverable_only}")
+    print(f"provider.fallback.on_recoverable_only.effective = {fallback_on_recoverable_only_effective}")
+    print("provider.execution_policy = ExecutionPolicy")
     print(f"provider.simulated_error = {simulate_provider_error}")
     print(f"provider.simulated_error_type = {simulate_error_type}")
     print(f"provider.simulated_fail_times = {simulate_fail_times}")
@@ -219,8 +207,6 @@ def chat(
     print(f"memory.exists = {memory_provider.memory_path.exists()}")
     print(f"agent.default_session_id = {config.agent.default_session_id}")
     print(f"agent.session_dir = {config.agent.session_dir}")
-    print(f"provider.name = {config.provider.name}")
-    print(f"provider.model = {config.provider.model}")
     print(f"loop.result.type = {LoopResult.__name__}")
     print(f"loop.result.session_id = {loop_result.session_id}")
     print(f"loop.result.prompt_length = {len(loop_result.prompt)}")
@@ -231,6 +217,8 @@ def chat(
     print(f"loop.result.error_type = {LoopError.__name__}")
     print(f"loop.result.error_kind_type = {LoopErrorKind.__name__}")
     print(f"loop.result.attempts = {loop_result.attempts}")
+    print(f"loop.result.provider_used = {loop_result.provider_used}")
+    print(f"loop.result.fallback_used = {loop_result.fallback_used}")
     if loop_result.assistant_message is not None:
         print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
     else:
@@ -261,36 +249,27 @@ def chat(
 
 @sessions_app.command("list")
 def sessions_list_command() -> None:
-    """列出当前所有已保存的 session。"""
     config = load_config(DEFAULT_CONFIG_PATH)
     session_dir = Path(config.agent.session_dir)
     sessions = list_sessions(session_dir)
-
     print(f"session.dir = {session_dir}")
     print(f"session.count = {len(sessions)}")
-
     for session in sessions:
         latest_message = session.latest_message()
         last_role = latest_message.role if latest_message is not None else "none"
         last_preview = latest_message.content if latest_message is not None else ""
         last_preview = last_preview.replace("\n", " ")[:80]
-        print(
-            f"- id={session.id} messages={len(session.messages)} "
-            f"last_role={last_role} last_preview={last_preview}"
-        )
+        print(f"- id={session.id} messages={len(session.messages)} last_role={last_role} last_preview={last_preview}")
 
 
 @sessions_app.command("inspect")
 def sessions_inspect_command(session_id: str) -> None:
-    """查看某个指定 session 的详细内容。"""
     config = load_config(DEFAULT_CONFIG_PATH)
     session_dir = Path(config.agent.session_dir)
     session = load_session(session_id, session_dir)
-
     if session is None:
         print(f"session.not_found = {session_id}")
         raise typer.Exit(code=1)
-
     print(f"session.id = {session.id}")
     print(f"session.message_count = {len(session.messages)}")
     for index, message in enumerate(session.messages, start=1):
@@ -298,7 +277,6 @@ def sessions_inspect_command(session_id: str) -> None:
 
 
 def main() -> None:
-    """脚本入口：把控制权交给 Typer 应用。"""
     app()
 
 

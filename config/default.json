@@ -16,6 +16,12 @@
   },
   "provider": {
     "name": "mock",
-    "model": "mock-echo-v1"
+    "model": "mock-echo-v1",
+    "fallback": {
+      "enabled": true,
+      "name": "mock",
+      "model": "mock-fallback-v1",
+      "on_recoverable_only": true
+    }
   }
 }
