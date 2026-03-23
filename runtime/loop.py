@@ -1,16 +1,20 @@
 """
 runtime/loop.py
 
-到了第 26 步，AgentLoop 继续保持“运行流程推进者”的角色，
-但它的返回值从单一 Message 升级成了结构化的 LoopResult。
+到了第 27 步，AgentLoop 继续保持“运行流程推进者”的角色，
+并把结果边界从“有结果对象”推进到“有结果语义”。
 
-这意味着 loop 开始具备更明确的结果边界：
-- assistant_message：本轮产出的回答
+这意味着 loop 不只知道：
+- assistant_message：本轮产出了什么
 - prompt：本轮真正发给 provider 的上下文
 - session_id：这轮执行属于哪个 session
 
-第 26 步的重点不是增加功能数量，
-而是把 loop 从“只会吐回复”推进成“会产出运行结果对象”。
+还开始知道：
+- status：这一轮处于什么结束状态
+- stop_reason：这一轮为什么停在这里
+
+第 27 步的重点不是增加执行分支，
+而是先把 happy-path 的结束语义立起来。
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from __future__ import annotations
 from providers.base import BaseProvider
 from runtime.context import ContextBuilder
 from runtime.messages import Message
-from runtime.result import LoopResult
+from runtime.result import LoopResult, LoopStatus, LoopStopReason
 from runtime.session import Session
 
 
@@ -26,15 +30,15 @@ class AgentLoop:
     """
     AgentLoop 是 agent 运行时的最小主流程骨架。
 
-    到了第 26 步，它的职责更聚焦于：
+    到了第 27 步，它的职责更聚焦于：
     1. 接收一个 Session
     2. 调用 ContextBuilder 构造 prompt
     3. 调用 provider
     4. 把 assistant 回复追加回 session
-    5. 返回结构化的 LoopResult
+    5. 返回带有 status / stop_reason 的结构化 LoopResult
 
-    这样一来，loop 的输出不再只是一个 Message，
-    后续要扩展 tool / stop reason / debug 信息时会更自然。
+    这样一来，loop 的输出开始具备“结束语义”，
+    为后续扩展 tools / errors / guardrails 做准备。
     """
 
     def __init__(self, provider: BaseProvider, context_builder: ContextBuilder) -> None:
@@ -50,7 +54,7 @@ class AgentLoop:
         2. 调用 provider.chat(prompt)
         3. 把结果包装成 assistant Message
         4. 将 assistant Message 追加回 session
-        5. 返回包含 session_id / prompt / assistant_message 的 LoopResult
+        5. 返回包含结果内容与结束语义的 LoopResult
         """
         prompt = self.context_builder.build(session)
         response_text = self.provider.chat(prompt)
@@ -60,4 +64,6 @@ class AgentLoop:
             session_id=session.id,
             prompt=prompt,
             assistant_message=assistant_message,
+            status=LoopStatus.COMPLETED,
+            stop_reason=LoopStopReason.ASSISTANT_RESPONSE,
         )

@@ -1,23 +1,39 @@
 """
 runtime/result.py
 
-这是第 26 步新增的 loop result 模块。
+这是第 27 步的 loop result 模块。
 
 目标：
-- 把 AgentLoop 的输出从单一 Message 升级成结构化结果对象
-- 为后续扩展 tool / stop reason / usage / debug 信息预留稳定边界
+- 让 AgentLoop 的结果对象不只表示“产出了什么”
+- 还开始表示“这一轮为什么结束”
+- 为后续扩展 tool / error / guardrail / max_steps 预留语义边界
 
-当前只保留最小必要字段：
+当前保留的最小字段：
 - session_id
 - prompt
 - assistant_message
+- status
+- stop_reason
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from runtime.messages import Message
+
+
+class LoopStatus(StrEnum):
+    """一次 loop 执行后的最小状态枚举。"""
+
+    COMPLETED = "completed"
+
+
+class LoopStopReason(StrEnum):
+    """一次 loop 执行结束的最小原因枚举。"""
+
+    ASSISTANT_RESPONSE = "assistant_response"
 
 
 @dataclass(slots=True)
@@ -27,3 +43,5 @@ class LoopResult:
     session_id: str
     prompt: str
     assistant_message: Message
+    status: LoopStatus
+    stop_reason: LoopStopReason

@@ -3,8 +3,9 @@ app/main.py
 
 这是项目当前的命令行入口。
 
-到了第 26 步，我们继续沿着 runtime 主线推进：
-把 AgentLoop 的输出从单一 assistant Message 升级成结构化 LoopResult。
+到了第 27 步，我们继续沿着 runtime 主线推进：
+给 LoopResult 加上最小 status / stop_reason，
+让 loop 不只是“有结果”，还开始“表达为什么结束”。
 
 这样启动装配层现在包含：
 - provider：模型调用边界
@@ -12,6 +13,7 @@ app/main.py
 - response policy：回答规则边界
 - context builder：稳定的 section-based prompt 装配边界
 - loop result：一次运行的结构化结果边界
+- loop status / stop reason：一次运行的最小结束语义
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ from runtime import (
     AgentLoop,
     ContextBuilder,
     LoopResult,
+    LoopStatus,
+    LoopStopReason,
     Message,
     ResponsePolicy,
     ResponseStyle,
@@ -144,6 +148,10 @@ def chat(
     print(f"loop.result.session_id = {loop_result.session_id}")
     print(f"loop.result.prompt_length = {len(loop_result.prompt)}")
     print(f"loop.result.assistant_role = {loop_result.assistant_message.role}")
+    print(f"loop.result.status = {loop_result.status.value}")
+    print(f"loop.result.stop_reason = {loop_result.stop_reason.value}")
+    print(f"loop.result.status_type = {LoopStatus.__name__}")
+    print(f"loop.result.stop_reason_type = {LoopStopReason.__name__}")
     print(f"session.id = {session.id}")
     print(f"session.loaded_from_disk = {loaded_from_disk}")
     print(f"session.previous_message_count = {previous_message_count}")
